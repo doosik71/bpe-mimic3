@@ -238,3 +238,11 @@ this plan concrete, not as settled decisions:
 - **ABP vs ART channel naming**: some records label the arterial waveform
   `ABP`, others `ART` (seen in local sampling). The indexer must treat both
   as the ground-truth arterial pressure channel.
+- **NaN handling before resampling**: `construct-dataset` resamples each
+  segment once, whole, before windowing. If a segment has NaN gaps (sensor
+  dropouts), `resample_poly`'s FIR filter can smear a NaN across nearby
+  output samples, so a window can be contaminated slightly beyond the raw
+  gap's width. The per-window NaN check still catches and drops these
+  windows, so this is a yield cost, not a correctness bug, but if
+  `dataset-statistic` shows it costing an outsized fraction of otherwise-good
+  data, consider masking/interpolating gaps before resampling instead.

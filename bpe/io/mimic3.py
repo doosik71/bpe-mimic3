@@ -18,7 +18,7 @@ import wfdb
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MIMIC3_DIR = Path("data/mimic3/mimic3wdb-matched/1.0")
+DEFAULT_MIMIC3_DIR = Path("data/mimic3")
 DEFAULT_INDEX_CSV = Path("data/mimic3_index.csv")
 
 PPG_SIGNAL = "PLETH"
