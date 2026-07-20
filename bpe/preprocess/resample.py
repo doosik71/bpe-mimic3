@@ -1,4 +1,10 @@
-"""Resample WFDB signals to the project's target sample rate (100 Hz)."""
+"""Resample WFDB signals to the project's target sample rate.
+
+MIMIC-III waveforms are natively 125 Hz, matching this project's target
+rate, so in practice this is usually a no-op (`resample_signal` short-
+circuits when `orig_fs == target_fs`). Kept as a general utility in case a
+segment ever surfaces at a different native rate.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +16,8 @@ from scipy.signal import resample_poly
 
 def resample_signal(x: np.ndarray, orig_fs: float, target_fs: float) -> np.ndarray:
     """Resample a 1D signal from `orig_fs` to `target_fs` via polyphase
-    filtering. `orig_fs`/`target_fs` are reduced to a small integer ratio
-    (125 -> 100 Hz reduces exactly to up=4, down=5)."""
+    filtering. `orig_fs`/`target_fs` are reduced to a small integer ratio;
+    if they're already equal (the common case here), returns `x` unchanged."""
     if orig_fs == target_fs:
         return np.asarray(x, dtype=float)
     orig_fs_i = int(round(orig_fs))

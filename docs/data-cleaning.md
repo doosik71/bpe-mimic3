@@ -24,10 +24,11 @@ index happened to list records.
 ### 2. Per-segment: read, resample, window
 
 For each segment: read the `PLETH` and arterial-pressure (`ABP`/`ART`)
-channels via `wfdb`, resample both 125 Hz → 100 Hz
-(`resample_signal`), then slice into 8 s windows with 4 s stride
-(`window_signal`). PPG and ABP windows are index-aligned (same window `i`
-covers the same time span in both channels).
+channels via `wfdb`, resample both to the target rate (a no-op in practice,
+since MIMIC-III's native 125 Hz already matches -- see `resample_signal`),
+then slice into 8 s windows with 4 s stride (`window_signal`). PPG and ABP
+windows are index-aligned (same window `i` covers the same time span in
+both channels).
 
 ### 3. Per-window filters
 
@@ -68,21 +69,21 @@ Applied once, after every segment's windows have been filtered:
 
 ### 5. Output
 
-One npz per surviving patient: `x` (N, 800) PPG windows, `y` (N, 2)
-`[SBP, DBP]`, `calib_x` (800,), `calib_y` (2,), `fs` (scalar, 100.0). See
+One npz per surviving patient: `x` (N, 1000) PPG windows, `y` (N, 2)
+`[SBP, DBP]`, `calib_x` (1000,), `calib_y` (2,), `fs` (scalar, 125.0). See
 [development-plan.md](development-plan.md) §4 step 11 for the full schema
 and where these files land (`data/dataset/{train,val,test}/` after
 `finalize_split`, flat under `data/dataset/` before it).
 
 ## Parameters and their status
 
-| Parameter                                                | Default                    | Status                                                                                                                                                                       |
-| -------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sbp_range`, `dbp_range`                                 | `[75,165]`, `[40,85]` mmHg | From method.md, not window-length-dependent.                                                                                                                                 |
-| `max_bp_deviation`                                       | 40 mmHg                    | From method.md, not window-length-dependent.                                                                                                                                 |
-| `min_ppg_std`                                            | 0.005                      | **Empirically derived** (see case study below) from the observed bimodal std distribution across the first ~100 converted subjects. Worth re-checking at full-dataset scale. |
-| `ppg_periodicity_threshold`, `abp_periodicity_threshold` | 0.05, 0.05                 | **Unvalidated placeholders**, carried over from the 30 s-window paper without being re-tuned for 8 s windows.                                                                |
-| `min_valid_windows`                                      | 375                        | **Estimated**, scaled from the paper's 30 s-window value (100) to 8 s windows by duration. Not yet validated against real yield.                                             |
+| Parameter                                                | Default                    | Status                                                                                                                                                                                                                            |
+| -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sbp_range`, `dbp_range`                                 | `[75,165]`, `[40,85]` mmHg | From method.md, not window-length-dependent.                                                                                                                                                                                      |
+| `max_bp_deviation`                                       | 40 mmHg                    | From method.md, not window-length-dependent.                                                                                                                                                                                      |
+| `min_ppg_std`                                            | 0.005                      | **Empirically derived** (see case study below) from the observed bimodal std distribution across the first ~100 converted subjects. Worth re-checking at full-dataset scale.                                                      |
+| `ppg_periodicity_threshold`, `abp_periodicity_threshold` | 0.05, 0.05                 | **Unvalidated placeholders**, carried over from the 30 s-window paper without being re-tuned for 8 s windows. `periodicity_score` integrates over one lag per sample, so the 1000-sample change shifts its typical magnitude too. |
+| `min_valid_windows`                                      | 375                        | **Estimated**, scaled from the paper's 30 s-window value (100) to 8 s windows by duration. Not yet validated against real yield.                                                                                                  |
 
 The two "unvalidated" rows are exactly what `dataset-statistic` (a planned,
 not-yet-built tool) is meant to help tune, by reporting retention rate as a

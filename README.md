@@ -10,11 +10,11 @@ Signals Using Convolutional Neural Networks And Siamese Network"* — see
 project is built from, and [docs/development-plan.md](docs/development-plan.md)
 for the concrete implementation plan and current status.
 
-> **Project status**: methodology and pipeline design are complete
-> (this README + the development plan); the data pipeline, models, and
-> training/evaluation code have not been implemented yet. See
-> [docs/development-plan.md](docs/development-plan.md) for the phased build
-> order.
+> **Project status**: the indexing, preprocessing, dataset construction,
+> model, training, evaluation, and reporting pipelines described below are
+> implemented (see [docs/development-plan.md](docs/development-plan.md) for
+> the phased build order and what's still open, e.g. `dataset-statistic`
+> and QC-threshold validation at full scale).
 
 ## Project Goal
 
@@ -25,18 +25,20 @@ in both an unpersonalized (**calibration-free**) mode and a personalized
 per patient.
 
 ```text
-PPG waveform (100 Hz, 8 s)  ──►  [ CNN ]                            ──►  SBP / DBP (mmHg) (calibration-free)
-PPG waveform (100 Hz, 8 s)  ──►  [ Siamese CNN vs. calib. PPG/BP ]  ──►  SBP / DBP (mmHg) (calibration-based)
+PPG waveform (125 Hz, 8 s)  ──►  [ CNN ]                            ──►  SBP / DBP (mmHg) (calibration-free)
+PPG waveform (125 Hz, 8 s)  ──►  [ Siamese CNN vs. calib. PPG/BP ]  ──►  SBP / DBP (mmHg) (calibration-based)
 ```
 
 This differs from the source paper (and from an earlier, related project
-that used VitalDB) in three deliberate ways:
+that used VitalDB) in two deliberate ways:
 
 | Aspect         | Source paper (method.md) | This project                                                                                                                                         |
 | -------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sample rate    | 125 Hz                   | **100 Hz** — the target deployment PPG source samples at 100 Hz, so all signals are resampled 125→100 Hz during dataset construction.                |
 | Segment length | 30 s                     | **8 s** — 30 s is too long for a real-time BP estimate; artifact-filter thresholds are re-derived for the shorter window (see the development plan). |
-| Dataset        | MIMIC-II, 125 Hz         | **MIMIC-III Waveform Database Matched Subset**, processed in full and downsampled to 100 Hz.                                                         |
+| Dataset        | MIMIC-II, 125 Hz         | **MIMIC-III Waveform Database Matched Subset**, processed in full at its native 125 Hz (no resampling needed).                                       |
+
+Sample rate is unchanged from the source paper: 125 Hz, MIMIC's native
+waveform rate, used as-is.
 
 ## Dataset — MIMIC-III Waveform Database (Matched Subset)
 
@@ -72,7 +74,7 @@ applies to this project.
 
 1. Index the matched subset for records that expose both PPG and an
    arterial pressure channel in the same segment.
-2. Resample PPG and ABP 125 Hz → 100 Hz.
+2. Read PPG and ABP at their native 125 Hz (no resampling needed).
 3. Slice into 8 s windows and label each window's SBP/DBP from the ABP
    window's peak/trough statistics.
 4. Reject physiologically implausible windows (SBP outside `[75, 165]`
@@ -122,7 +124,7 @@ build order); items are added as each phase is implemented.
 bpe-mimic3/
 ├── bin/                              # Windows .bat + POSIX sh launchers
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
-│   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
+│   ├── construct-dataset[.bat]       # build data/dataset (125 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
 │   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD; also browses in-progress (unsplit) data
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics

@@ -60,7 +60,7 @@ from bpe.preprocess.window import window_signal
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATASET_DIR = Path("data/dataset")
-DEFAULT_TARGET_FS = 100.0
+DEFAULT_TARGET_FS = 125.0  # MIMIC-III's native rate -- no resampling needed
 DEFAULT_WINDOW_SEC = 8.0
 DEFAULT_STRIDE_SEC = 4.0
 DEFAULT_SPLIT = (0.6, 0.2, 0.2)

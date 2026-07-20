@@ -10,18 +10,18 @@ available locally at `data/mimic3`.
 These were confirmed with the project owner and are treated as fixed
 constraints for the rest of this plan:
 
-| Topic                   | Decision                                                                                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Calibration-based model | Reproduce the **Siamese network** from method.md as-is (twin CNN feature extractors, feature-vector subtraction, ΔBP regression head). No bias-correction/OSU alternative for now.                                             |
-| Calibration-free model  | Implement **one** CNN first — the AlexNet-inspired architecture from method.md. The model layer is designed as a registry from the start so more architectures can be added later without breaking the training/eval pipeline. |
-| Segment length          | **8 s**, not the paper's 30 s. Rationale: 30 s is too long for a real-time BP estimate. This changes downstream STFT sub-window sizing and the artifact-filter thresholds (see §4).                                            |
-| Target sample rate      | **100 Hz**, not the native 125 Hz of MIMIC-III waveforms. All PPG/ABP signals are resampled 125→100 Hz before windowing.                                                                                                       |
-| Dataset scope           | Process the **entire** `mimic3wdb-matched/1.0` subset from the start (not a capped pilot). Expect roughly 10 % of raw segments to survive QC, similar in spirit to the ~5 % retention reported in method.md.                   |
-| Data flow               | `data/mimic3` (read-only) → cleaning/labeling pipeline → `data/dataset` (PyTorch-ready). All training/evaluation code reads only from `data/dataset`; nothing ever writes to `data/mimic3`.                                    |
-| Repository shape        | Build the full script/CLI structure up front, at parity with the previous `bpe-vitaldb` project (see §3), rather than growing it incrementally.                                                                                |
-| Calibration-window reuse | A patient's calibration window is also used as a normal training sample for the calibration-free model (no held-out anchor point).                                                                                            |
-| Spectrogram sub-window   | Fixed at **1 s** (Hamming window, 95 % overlap) for the 8 s segment, not derived proportionally from the paper's 6 s/30 s ratio.                                                                                              |
-| Multi-segment records    | Processed **segment-by-segment only** — windows never span a segment boundary, since segments can have different active signal sets and inter-segment gaps aren't guaranteed to be zero.                                     |
+| Topic                    | Decision                                                                                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Calibration-based model  | Reproduce the **Siamese network** from method.md as-is (twin CNN feature extractors, feature-vector subtraction, ΔBP regression head). No bias-correction/OSU alternative for now.                                             |
+| Calibration-free model   | Implement **one** CNN first — the AlexNet-inspired architecture from method.md. The model layer is designed as a registry from the start so more architectures can be added later without breaking the training/eval pipeline. |
+| Segment length           | **8 s**, not the paper's 30 s. Rationale: 30 s is too long for a real-time BP estimate. This changes downstream STFT sub-window sizing and the artifact-filter thresholds (see §4).                                            |
+| Target sample rate       | **125 Hz** — MIMIC-III's native waveform rate, used as-is.                                                                                                                                                                     |
+| Dataset scope            | Process the **entire** `mimic3wdb-matched/1.0` subset from the start (not a capped pilot). Expect roughly 10 % of raw segments to survive QC, similar in spirit to the ~5 % retention reported in method.md.                   |
+| Data flow                | `data/mimic3` (read-only) → cleaning/labeling pipeline → `data/dataset` (PyTorch-ready). All training/evaluation code reads only from `data/dataset`; nothing ever writes to `data/mimic3`.                                    |
+| Repository shape         | Build the full script/CLI structure up front, at parity with the previous `bpe-vitaldb` project (see §3), rather than growing it incrementally.                                                                                |
+| Calibration-window reuse | A patient's calibration window is also used as a normal training sample for the calibration-free model (no held-out anchor point).                                                                                             |
+| Spectrogram sub-window   | Fixed at **1 s** (Hamming window, 95 % overlap) for the 8 s segment, not derived proportionally from the paper's 6 s/30 s ratio.                                                                                               |
+| Multi-segment records    | Processed **segment-by-segment only** — windows never span a segment boundary, since segments can have different active signal sets and inter-segment gaps aren't guaranteed to be zero.                                       |
 
 ## 2. Source Data Characteristics (verified locally)
 
@@ -53,14 +53,14 @@ constraints for the rest of this plan:
 
 ## 3. Target Repository Layout
 
-Mirrors `bpe-vitaldb`'s structure, adapted for MIMIC-III/WFDB and the 100 Hz /
+Mirrors `bpe-vitaldb`'s structure, adapted for MIMIC-III/WFDB and the 125 Hz /
 8 s / dual-mode design:
 
 ```text
 bpe-mimic3/
 ├── bin/                              # Windows .bat + POSIX sh launchers
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
-│   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
+│   ├── construct-dataset[.bat]       # build data/dataset (125 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
 │   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD; also browses in-progress (unsplit) data
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics
@@ -96,7 +96,7 @@ bpe-mimic3/
 └── README.md
 ```
 
-## 4. Preprocessing Pipeline (method.md, adapted to 8 s / 100 Hz)
+## 4. Preprocessing Pipeline (method.md, adapted to 8 s @ native 125 Hz)
 
 Applied per candidate record, then aggregated per patient. See
 [docs/data-cleaning.md](data-cleaning.md) for the implementation-level
@@ -110,11 +110,12 @@ filter gap found by inspection).
    `data/` (never under `data/mimic3`) that all later steps read instead of
    re-scanning the raw files. This is the pruning step that keeps the
    full-dataset pass tractable.
-2. **Resampling**: PPG and ABP channels are resampled 125 Hz → 100 Hz
-   (`scipy.signal.resample_poly`, `up=4, down=5`, an exact ratio since
-   125 = 25·5 and 100 = 25·4 — no fractional-rate approximation needed).
-3. **Windowing**: signals are cut into **8 s** windows (800 samples at
-   100 Hz). Stride/overlap defaults to the 50 % convention used previously
+2. **Resampling**: a no-op in practice -- PPG and ABP channels are already
+   natively 125 Hz, which is the target rate (`resample_signal` is kept as
+   a safety net via `scipy.signal.resample_poly` in case a segment ever
+   surfaces at a different native rate).
+3. **Windowing**: signals are cut into **8 s** windows (1000 samples at
+   125 Hz). Stride/overlap defaults to the 50 % convention used previously
    (4 s stride) but is a tunable CLI parameter.
 4. **Per-window SBP/DBP labeling**: from the ABP window, detect peaks/troughs
    and take the mean of the max/min peaks as SBP/DBP, exactly as in
@@ -175,9 +176,9 @@ filter gap found by inspection).
     `data/dataset/{train,val,test}/{subject_id}.npz` containing:
 
     ```text
-    x         float32  (N, 800)   PPG windows (8 s @ 100 Hz)
+    x         float32  (N, 1000)  PPG windows (8 s @ 125 Hz)
     y         float32  (N, 2)     [SBP, DBP] mmHg per window
-    calib_x   float32  (800,)     calibration-window PPG
+    calib_x   float32  (1000,)    calibration-window PPG
     calib_y   float32  (2,)       calibration-window [SBP, DBP]
     fs        float32  scalar     sample rate the windows were built at (target_fs)
     ```
