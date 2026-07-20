@@ -1,0 +1,62 @@
+"""Evaluate a trained calibration-free model on a data/dataset split: MAE,
+RMSE, ME, SD, BHS cumulative-error grade, and AAMI pass/fail for SBP and
+DBP. Writes eval_results.json, eval_plot.png, error_hist.png next to the
+checkpoint.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import torch
+from torch.utils.data import DataLoader
+
+from bpe.dataset import DEFAULT_DATASET_DIR, CalibrationFreeDataset
+from bpe.evaluate import calibration_free_predict, run_and_report
+from bpe.models.registry import build_calibration_free_model, list_calibration_free_models
+
+
+def _resolve_device(name: str) -> torch.device:
+    if name == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(name)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("model_dir", type=Path, help="Run directory containing a checkpoint, e.g. data/models/cnn")
+    parser.add_argument("--checkpoint", default="best.pt", help="Checkpoint filename inside model_dir (default: %(default)s)")
+    parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
+    parser.add_argument("--split", default="test", choices=("train", "val", "test"))
+    parser.add_argument("--batch-size", type=int, default=512)
+    parser.add_argument("--device", default="auto", help="auto|cpu|cuda|cuda:N")
+    parser.add_argument("--workers", type=int, default=0)
+    parser.add_argument("--no-normalize", action="store_true", help="Skip per-window z-score normalization")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    device = _resolve_device(args.device)
+
+    model_name = args.model_dir.name
+    if model_name not in list_calibration_free_models():
+        raise SystemExit(
+            f"{model_name!r} is not a calibration-free model name "
+            f"(available: {list_calibration_free_models()}); use eval-calib-model for calibration-based models"
+        )
+
+    checkpoint = torch.load(args.model_dir / args.checkpoint, map_location=device)
+    model = build_calibration_free_model(model_name)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.to(device)
+
+    dataset = CalibrationFreeDataset(args.dataset_dir, args.split, normalize=not args.no_normalize)
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
+
+    run_and_report(model, loader, calibration_free_predict, device, args.model_dir)
+
+
+if __name__ == "__main__":
+    main()

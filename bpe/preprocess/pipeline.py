@@ -6,6 +6,20 @@ docs/development-plan.md §4, aggregates per patient across all of their
 records in chronological order, applies the patient-level exclusion and
 outlier rules, and writes one npz per surviving patient into
 data/dataset/{train,val,test}/.
+
+This runs in two resumable phases so an interrupted run doesn't have to
+restart from scratch:
+
+1. `convert_dataset` processes one subject at a time and immediately writes
+   its npz flat under `output_dir` (pre-split), recording every outcome
+   (kept or excluded) in `output_dir/_progress.csv` as it goes. A subject
+   already in that ledger is skipped on the next run.
+2. `finalize_split` moves each converted (kept) subject's flat npz into
+   `output_dir/{train,val,test}/` using the same deterministic
+   `split_subjects`, so the result is identical to doing everything in one
+   in-memory pass regardless of how many resumed runs it took to get there.
+
+`build_dataset` runs both phases back to back for convenience.
 """
 
 from __future__ import annotations
@@ -254,10 +268,15 @@ def split_subjects(
     }
 
 
-def write_patient_npz(result: PatientResult, output_dir: Path, split_name: str) -> Path:
-    split_dir = Path(output_dir) / split_name
-    split_dir.mkdir(parents=True, exist_ok=True)
-    out_path = split_dir / f"{result.subject_id}.npz"
+def write_patient_npz(result: PatientResult, output_dir: Path, split_name: Optional[str] = None) -> Path:
+    """Write one patient's npz. With `split_name=None` (the default), it is
+    written flat directly under `output_dir` -- the pre-split staging state
+    `convert_dataset` produces; `finalize_split` later moves it into
+    `output_dir/{split_name}/`."""
+    output_dir = Path(output_dir)
+    target_dir = output_dir / split_name if split_name else output_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    out_path = target_dir / f"{result.subject_id}.npz"
     np.savez(
         out_path,
         x=result.x,
@@ -267,6 +286,230 @@ def write_patient_npz(result: PatientResult, output_dir: Path, split_name: str) 
         fs=np.float32(result.fs),
     )
     return out_path
+
+
+PROGRESS_FILENAME = "_progress.csv"
+
+
+@dataclass
+class ProgressRow:
+    subject_id: str
+    status: str  # "kept" | "excluded"
+    n_windows_total: int
+    n_windows_kept: int
+
+
+def read_progress(output_dir: Path) -> dict[str, ProgressRow]:
+    """Read the resumability ledger written by `convert_dataset`: every
+    subject already attempted, and its outcome."""
+    path = Path(output_dir) / PROGRESS_FILENAME
+    if not path.is_file():
+        return {}
+    rows: dict[str, ProgressRow] = {}
+    with path.open("r", newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            rows[row["subject_id"]] = ProgressRow(
+                subject_id=row["subject_id"],
+                status=row["status"],
+                n_windows_total=int(row["n_windows_total"]),
+                n_windows_kept=int(row["n_windows_kept"]),
+            )
+    return rows
+
+
+def _append_progress(output_dir: Path, row: ProgressRow) -> None:
+    """Append one subject's outcome, opened and closed for this call alone
+    (not held open across the run) so a completed row is fully flushed to
+    disk before the next subject starts -- if the process is killed, at
+    most the in-flight subject's work is lost, never an already-recorded
+    one."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / PROGRESS_FILENAME
+    is_new = not path.is_file()
+    with path.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if is_new:
+            writer.writerow(["subject_id", "status", "n_windows_total", "n_windows_kept"])
+        writer.writerow([row.subject_id, row.status, row.n_windows_total, row.n_windows_kept])
+
+
+def convert_dataset(
+    mimic3_dir: Path,
+    index_csv: Path,
+    output_dir: Path = DEFAULT_DATASET_DIR,
+    target_fs: float = DEFAULT_TARGET_FS,
+    window_sec: float = DEFAULT_WINDOW_SEC,
+    stride_sec: float = DEFAULT_STRIDE_SEC,
+    sbp_range: tuple[float, float] = DEFAULT_SBP_RANGE,
+    dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
+    ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
+    abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
+    min_valid_windows: int = DEFAULT_MIN_VALID_WINDOWS,
+    max_reject_fraction: float = DEFAULT_MAX_REJECT_FRACTION,
+    max_bp_deviation: float = DEFAULT_MAX_BP_DEVIATION,
+    limit_subjects: Optional[int] = None,
+    workers: int = 8,
+    show_progress: bool = True,
+    force: bool = False,
+) -> dict:
+    """Phase 1: process every indexed subject not already converted,
+    writing each kept patient's npz flat under `output_dir` (pre-split) as
+    soon as it's ready, and recording every outcome (kept or excluded) in
+    `output_dir/_progress.csv`.
+
+    Resumable by construction: a subject already present in `_progress.csv`
+    is skipped (pass `force=True` to reprocess everyone regardless of what
+    is already recorded). Note the ledger is only valid for a fixed set of
+    QC parameters -- changing e.g. the periodicity thresholds between runs
+    without `force=True` mixes results computed under different settings.
+    A subject that raises an exception is *not* recorded (an error is more
+    likely transient than a stable outcome), so it is retried next run.
+    """
+    mimic3_dir = Path(mimic3_dir)
+    output_dir = Path(output_dir)
+    by_subject = read_index_csv(index_csv)
+    subject_ids = sorted(by_subject.keys())
+    if limit_subjects is not None:
+        subject_ids = subject_ids[:limit_subjects]
+
+    previous_progress = {} if force else read_progress(output_dir)
+    pending_ids = [sid for sid in subject_ids if sid not in previous_progress]
+    already_done = len(subject_ids) - len(pending_ids)
+
+    progress_bar = None
+    if show_progress:
+        from tqdm import tqdm
+
+        progress_bar = tqdm(total=len(pending_ids), desc="converting patients", unit="pt")
+
+    def _process(subject_id: str) -> tuple[Optional[PatientResult], int]:
+        return process_patient(
+            mimic3_dir,
+            subject_id,
+            by_subject[subject_id],
+            target_fs=target_fs,
+            window_sec=window_sec,
+            stride_sec=stride_sec,
+            sbp_range=sbp_range,
+            dbp_range=dbp_range,
+            ppg_periodicity_threshold=ppg_periodicity_threshold,
+            abp_periodicity_threshold=abp_periodicity_threshold,
+            min_valid_windows=min_valid_windows,
+            max_reject_fraction=max_reject_fraction,
+            max_bp_deviation=max_bp_deviation,
+        )
+
+    errors: list[tuple[str, str]] = []
+    n_kept = 0
+    n_excluded = 0
+    total_windows_attempted = 0
+    total_windows_kept = 0
+
+    def _handle(subject_id: str, result: Optional[PatientResult], n_total: int) -> None:
+        nonlocal n_kept, n_excluded, total_windows_attempted, total_windows_kept
+        total_windows_attempted += n_total
+        if result is not None:
+            # Write before recording progress: if the process dies between
+            # the two, the subject is just retried next run instead of
+            # being marked done with no file to show for it.
+            write_patient_npz(result, output_dir, split_name=None)
+            _append_progress(output_dir, ProgressRow(subject_id, "kept", n_total, result.x.shape[0]))
+            n_kept += 1
+            total_windows_kept += result.x.shape[0]
+        else:
+            _append_progress(output_dir, ProgressRow(subject_id, "excluded", n_total, 0))
+            n_excluded += 1
+
+    if workers <= 1:
+        for subject_id in pending_ids:
+            try:
+                result, n_total = _process(subject_id)
+                _handle(subject_id, result, n_total)
+            except Exception as exc:
+                errors.append((subject_id, str(exc)))
+                logger.warning("failed to process subject %s", subject_id, exc_info=True)
+            if progress_bar is not None:
+                progress_bar.update(1)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(_process, sid): sid for sid in pending_ids}
+            for future in as_completed(futures):
+                subject_id = futures[future]
+                try:
+                    result, n_total = future.result()
+                    _handle(subject_id, result, n_total)
+                except Exception as exc:
+                    errors.append((subject_id, str(exc)))
+                    logger.warning("failed to process subject %s", subject_id, exc_info=True)
+                if progress_bar is not None:
+                    progress_bar.update(1)
+
+    if progress_bar is not None:
+        progress_bar.close()
+
+    return {
+        "subjects_scanned": len(subject_ids),
+        "subjects_already_done": already_done,
+        "subjects_processed_this_run": len(pending_ids),
+        "subjects_kept_this_run": n_kept,
+        "subjects_excluded_this_run": n_excluded,
+        "total_windows_attempted_this_run": total_windows_attempted,
+        "total_windows_kept_this_run": total_windows_kept,
+        "errors": errors,
+    }
+
+
+def finalize_split(
+    output_dir: Path = DEFAULT_DATASET_DIR,
+    split: tuple[float, float, float] = DEFAULT_SPLIT,
+    seed: int = DEFAULT_SEED,
+) -> dict:
+    """Phase 2: move every converted (kept) subject's flat npz from
+    `output_dir/{subject_id}.npz` into `output_dir/{train,val,test}/`,
+    using the same deterministic `split_subjects` as a single in-memory
+    pass would (docs/development-plan.md §4 step 10) -- sorted subject IDs
+    then seeded shuffle, so the assignment depends only on *which* subjects
+    were kept, never on the order they were converted in. Safe to re-run:
+    a subject already moved into place is left alone.
+    """
+    output_dir = Path(output_dir)
+    progress = read_progress(output_dir)
+    kept_subjects = [sid for sid, row in progress.items() if row.status == "kept"]
+
+    splits = split_subjects(kept_subjects, split=split, seed=seed)
+
+    moved = 0
+    already_in_place = 0
+    missing: list[str] = []
+    windows_by_split: dict[str, int] = {}
+
+    for split_name, subject_ids in splits.items():
+        n_windows = 0
+        for subject_id in subject_ids:
+            dest = output_dir / split_name / f"{subject_id}.npz"
+            if dest.is_file():
+                already_in_place += 1
+            else:
+                src = output_dir / f"{subject_id}.npz"
+                if not src.is_file():
+                    missing.append(subject_id)
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                src.rename(dest)
+                moved += 1
+            with np.load(dest) as data:
+                n_windows += int(data["x"].shape[0])
+        windows_by_split[split_name] = n_windows
+
+    return {
+        "subjects_kept": len(kept_subjects),
+        "subjects_by_split": {k: len(v) for k, v in splits.items()},
+        "windows_by_split": windows_by_split,
+        "moved": moved,
+        "already_in_place": already_in_place,
+        "missing": missing,
+    }
 
 
 def build_dataset(
@@ -288,26 +531,20 @@ def build_dataset(
     limit_subjects: Optional[int] = None,
     workers: int = 8,
     show_progress: bool = True,
+    force: bool = False,
+    skip_split: bool = False,
+    split_only: bool = False,
 ) -> dict:
-    """Process every indexed subject and write data/dataset/{train,val,test}.
-    Returns a summary dict; never writes to `mimic3_dir`."""
-    mimic3_dir = Path(mimic3_dir)
-    by_subject = read_index_csv(index_csv)
-    subject_ids = sorted(by_subject.keys())
-    if limit_subjects is not None:
-        subject_ids = subject_ids[:limit_subjects]
-
-    progress = None
-    if show_progress:
-        from tqdm import tqdm
-
-        progress = tqdm(total=len(subject_ids), desc="processing patients", unit="pt")
-
-    def _process(subject_id: str) -> tuple[Optional[PatientResult], int]:
-        return process_patient(
+    """Convenience wrapper: run `convert_dataset` (unless `split_only`),
+    then `finalize_split` (unless `skip_split`). Never writes to
+    `mimic3_dir`. See those two functions for the resumable two-phase
+    design."""
+    convert_summary: dict = {}
+    if not split_only:
+        convert_summary = convert_dataset(
             mimic3_dir,
-            subject_id,
-            by_subject[subject_id],
+            index_csv,
+            output_dir,
             target_fs=target_fs,
             window_sec=window_sec,
             stride_sec=stride_sec,
@@ -318,65 +555,14 @@ def build_dataset(
             min_valid_windows=min_valid_windows,
             max_reject_fraction=max_reject_fraction,
             max_bp_deviation=max_bp_deviation,
+            limit_subjects=limit_subjects,
+            workers=workers,
+            show_progress=show_progress,
+            force=force,
         )
 
-    results: dict[str, PatientResult] = {}
-    errors: list[tuple[str, str]] = []
-    total_windows_attempted = 0
+    split_summary: dict = {}
+    if not skip_split:
+        split_summary = finalize_split(output_dir, split=split, seed=seed)
 
-    def _handle(subject_id: str, result: Optional[PatientResult], n_total: int) -> None:
-        nonlocal total_windows_attempted
-        total_windows_attempted += n_total
-        if result is not None:
-            results[subject_id] = result
-
-    if workers <= 1:
-        for subject_id in subject_ids:
-            try:
-                result, n_total = _process(subject_id)
-                _handle(subject_id, result, n_total)
-            except Exception as exc:
-                errors.append((subject_id, str(exc)))
-                logger.warning("failed to process subject %s", subject_id, exc_info=True)
-            if progress is not None:
-                progress.update(1)
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_process, sid): sid for sid in subject_ids}
-            for future in as_completed(futures):
-                subject_id = futures[future]
-                try:
-                    result, n_total = future.result()
-                    _handle(subject_id, result, n_total)
-                except Exception as exc:
-                    errors.append((subject_id, str(exc)))
-                    logger.warning("failed to process subject %s", subject_id, exc_info=True)
-                if progress is not None:
-                    progress.update(1)
-
-    if progress is not None:
-        progress.close()
-
-    splits = split_subjects(list(results.keys()), split=split, seed=seed)
-
-    windows_by_split: dict[str, int] = {}
-    for split_name, ids in splits.items():
-        n_windows = 0
-        for subject_id in ids:
-            result = results[subject_id]
-            write_patient_npz(result, output_dir, split_name)
-            n_windows += result.x.shape[0]
-        windows_by_split[split_name] = n_windows
-
-    total_windows_kept = sum(r.x.shape[0] for r in results.values())
-
-    return {
-        "subjects_scanned": len(subject_ids),
-        "subjects_kept": len(results),
-        "subjects_by_split": {k: len(v) for k, v in splits.items()},
-        "windows_by_split": windows_by_split,
-        "total_windows_attempted": total_windows_attempted,
-        "total_windows_kept": total_windows_kept,
-        "retention_rate": (total_windows_kept / total_windows_attempted) if total_windows_attempted else 0.0,
-        "errors": errors,
-    }
+    return {"convert": convert_summary, "split": split_summary}

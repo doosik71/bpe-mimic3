@@ -2,6 +2,11 @@
 (produced by build-mimic3-index): resample/window/label/filter every
 qualifying segment per docs/development-plan.md §4, then write
 data/dataset/{train,val,test}/{subject_id}.npz.
+
+Runs in two resumable phases (bpe.preprocess.pipeline.convert_dataset then
+finalize_split): each subject is converted and written to disk as soon as
+it's done, and recorded in data/dataset/_progress.csv, so re-running this
+after an interruption picks up where it left off instead of starting over.
 """
 
 from __future__ import annotations
@@ -85,6 +90,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--no-progress", action="store_true", help="Disable the tqdm progress bar")
     parser.add_argument("--verbose", action="store_true", help="Log per-subject/segment failures")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reprocess every subject even if already recorded in _progress.csv "
+        "(needed after changing QC parameters, since the ledger doesn't track them)",
+    )
+    parser.add_argument(
+        "--skip-split",
+        action="store_true",
+        help="Only run the conversion phase; leave converted npz files flat, unsplit",
+    )
+    parser.add_argument(
+        "--split-only",
+        action="store_true",
+        help="Skip conversion; only (re-)assign already-converted subjects into train/val/test",
+    )
     return parser.parse_args()
 
 
@@ -114,19 +135,41 @@ def main() -> None:
         limit_subjects=args.limit_subjects,
         workers=args.workers,
         show_progress=not args.no_progress,
+        force=args.force,
+        skip_split=args.skip_split,
+        split_only=args.split_only,
     )
 
-    print(f"subjects scanned      : {summary['subjects_scanned']}")
-    print(f"subjects kept         : {summary['subjects_kept']}")
-    for split_name in ("train", "val", "test"):
-        n_subj = summary["subjects_by_split"].get(split_name, 0)
-        n_win = summary["windows_by_split"].get(split_name, 0)
-        print(f"  {split_name:<5s}               : {n_subj} subjects, {n_win} windows")
-    print(f"windows attempted     : {summary['total_windows_attempted']}")
-    print(f"windows kept          : {summary['total_windows_kept']}")
-    print(f"retention rate        : {summary['retention_rate']:.2%}")
-    print(f"errors                : {len(summary['errors'])}")
-    print(f"dataset written to    : {args.output_dir}")
+    convert = summary["convert"]
+    if convert:
+        print(f"subjects scanned          : {convert['subjects_scanned']}")
+        print(f"subjects already done     : {convert['subjects_already_done']}")
+        print(f"subjects processed now    : {convert['subjects_processed_this_run']}")
+        print(f"  kept                    : {convert['subjects_kept_this_run']}")
+        print(f"  excluded                : {convert['subjects_excluded_this_run']}")
+        print(f"windows attempted (now)   : {convert['total_windows_attempted_this_run']}")
+        print(f"windows kept (now)        : {convert['total_windows_kept_this_run']}")
+        if convert["total_windows_attempted_this_run"]:
+            rate = convert["total_windows_kept_this_run"] / convert["total_windows_attempted_this_run"]
+            print(f"retention rate (now)      : {rate:.2%}")
+        print(f"errors (retried next run) : {len(convert['errors'])}")
+
+    split_summary = summary["split"]
+    if split_summary:
+        print(f"subjects kept (total)     : {split_summary['subjects_kept']}")
+        for split_name in ("train", "val", "test"):
+            n_subj = split_summary["subjects_by_split"].get(split_name, 0)
+            n_win = split_summary["windows_by_split"].get(split_name, 0)
+            print(f"  {split_name:<5s}                   : {n_subj} subjects, {n_win} windows")
+        print(f"moved this run            : {split_summary['moved']}")
+        print(f"already in place          : {split_summary['already_in_place']}")
+        if split_summary["missing"]:
+            print(
+                f"missing (kept but no npz) : {len(split_summary['missing'])} "
+                f"e.g. {split_summary['missing'][:5]}"
+            )
+
+    print(f"dataset directory         : {args.output_dir}")
 
 
 if __name__ == "__main__":

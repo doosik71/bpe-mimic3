@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec uv run python "$SCRIPT_DIR/../scripts/eval-calib-model.py" "$@"

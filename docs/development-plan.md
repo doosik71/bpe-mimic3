@@ -142,6 +142,24 @@ Applied per candidate record, then aggregated per patient:
    trains on it like any other window.
 10. **Patient-level split**: 60/20/20 train/val/test, split by patient (not
     by window) to prevent leakage, matching method.md and `bpe-vitaldb`.
+    Construction is **resumable in two phases** rather than one big
+    in-memory pass, so an interrupted run doesn't have to restart from
+    scratch:
+    - **Convert** (`convert_dataset`): each subject is processed and its
+      npz written **flat** under `data/dataset/{subject_id}.npz` as soon as
+      it's ready, and every outcome (kept or excluded) is appended to
+      `data/dataset/_progress.csv`. A subject already in that ledger is
+      skipped on the next run (`--force` reprocesses everyone; this cache
+      is only valid for a fixed set of QC parameters).
+    - **Split** (`finalize_split`): once conversion has run, every kept
+      subject's flat npz is moved into `data/dataset/{train,val,test}/`
+      using the same `split_subjects` (sorted IDs, seeded shuffle), so the
+      assignment depends only on *which* subjects were kept, never on the
+      order they were converted in -- identical to a single in-memory pass
+      regardless of how many resumed runs it took. Safe to re-run: already
+      -moved subjects are left alone.
+    - `construct-dataset` runs both phases back to back by default;
+      `--skip-split` / `--split-only` run just one.
 11. **Output format**: one `.npz` per patient under
     `data/dataset/{train,val,test}/{subject_id}.npz` containing:
 
