@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.egg-info
+*.py[oc]
+/build/
+/dist/
+/wheels/
+
+# Virtual environments
+/.venv
+
+# Data files (too large for git)
+/.claude
+/data
+/PROMPT.md
+/temp
+.ipynb_checkpoints
+
