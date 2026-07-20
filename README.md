@@ -122,10 +122,8 @@ bpe-mimic3/
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
 │   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
-│   ├── dataset-browser[.bat]         # GUI browser over data/dataset segments
+│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD over data/dataset
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics
-│   ├── spectro-browser[.bat]         # PPG spectrogram browser
-│   ├── psd-browser[.bat]             # PPG power-spectral-density browser
 │   ├── check-cuda.bat
 │   ├── print-model[.bat] / print-all-model[.bat]
 │   ├── train-model[.bat] / train-all-model[.bat]
@@ -138,7 +136,7 @@ bpe-mimic3/
 ├── bpe/                              # package
 │   ├── io/                           # WFDB record/segment reading helpers
 │   ├── preprocess/                   # resample, window, QC, peak-based labeling
-│   ├── features/                     # spectrogram (STFT) computation
+│   ├── features/                     # spectrogram (STFT) + PSD computation
 │   ├── models/                       # calibration-free CNN, Siamese, registry
 │   ├── dataset.py                     # PyTorch Dataset/DataLoader (+ calib pairing)
 │   ├── trainer.py

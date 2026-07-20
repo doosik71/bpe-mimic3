@@ -80,6 +80,7 @@ class PatientResult:
     y: np.ndarray  # (N, 2) float32 -- [SBP, DBP] mmHg per window
     calib_x: np.ndarray  # (window_samples,) float32
     calib_y: np.ndarray  # (2,) float32
+    fs: float  # sample rate the windows were built at (target_fs)
 
 
 def read_index_csv(index_csv: Path) -> dict[str, list[IndexEntry]]:
@@ -229,7 +230,7 @@ def process_patient(
     x = np.stack(kept_windows).astype(np.float32)
     y = np.array(kept_labels, dtype=np.float32)
 
-    return PatientResult(subject_id=subject_id, x=x, y=y, calib_x=calib_x, calib_y=calib_y), n_total
+    return PatientResult(subject_id=subject_id, x=x, y=y, calib_x=calib_x, calib_y=calib_y, fs=target_fs), n_total
 
 
 def split_subjects(
@@ -257,7 +258,14 @@ def write_patient_npz(result: PatientResult, output_dir: Path, split_name: str) 
     split_dir = Path(output_dir) / split_name
     split_dir.mkdir(parents=True, exist_ok=True)
     out_path = split_dir / f"{result.subject_id}.npz"
-    np.savez(out_path, x=result.x, y=result.y, calib_x=result.calib_x, calib_y=result.calib_y)
+    np.savez(
+        out_path,
+        x=result.x,
+        y=result.y,
+        calib_x=result.calib_x,
+        calib_y=result.calib_y,
+        fs=np.float32(result.fs),
+    )
     return out_path
 
 

@@ -62,10 +62,8 @@ bpe-mimic3/
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
 │   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
-│   ├── dataset-browser[.bat]         # GUI browser over data/dataset segments
+│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD over data/dataset
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics
-│   ├── spectro-browser[.bat]         # PPG spectrogram browser
-│   ├── psd-browser[.bat]             # PPG power-spectral-density browser
 │   ├── check-cuda.bat
 │   ├── print-model[.bat] / print-all-model[.bat]
 │   ├── train-model[.bat] / train-all-model[.bat]
@@ -78,7 +76,7 @@ bpe-mimic3/
 ├── bpe/                              # package
 │   ├── io/                           # WFDB record/segment reading helpers
 │   ├── preprocess/                  # resample, window, QC, peak-based labeling
-│   ├── features/                    # spectrogram (STFT) computation
+│   ├── features/                    # spectrogram (STFT) + PSD computation
 │   ├── models/                      # calibration-free CNN, Siamese, registry
 │   ├── dataset.py                    # PyTorch Dataset/DataLoader (+ calib pairing)
 │   ├── trainer.py
@@ -152,6 +150,7 @@ Applied per candidate record, then aggregated per patient:
     y         float32  (N, 2)     [SBP, DBP] mmHg per window
     calib_x   float32  (800,)     calibration-window PPG
     calib_y   float32  (2,)       calibration-window [SBP, DBP]
+    fs        float32  scalar     sample rate the windows were built at (target_fs)
     ```
 
     The calibration-free CNN trains directly on `(x, y)`. The Siamese model
@@ -201,9 +200,11 @@ pure addition, not a refactor.
    end-to-end over the indexed records → `data/dataset/{train,val,test}`.
    Validate with `dataset-statistic` (retention rate, SBP/DBP distributions,
    per-split patient/window counts) before trusting the output for training.
-5. **Dataset inspection tooling**: `dataset-browser`, `spectro-browser`,
-   `psd-browser` — needed to sanity-check real segments/spectrograms before
-   committing to spectrogram hyperparameters (sub-window length, overlap).
+5. **Dataset inspection tooling**: a single `dataset-browser` GUI (split /
+   subject / window list on the left, stacked waveform + spectrogram + PSD
+   plots on the right) — needed to sanity-check real segments and spectra
+   before committing to spectrogram hyperparameters (sub-window length,
+   overlap).
 6. **Model implementation**: calibration-free CNN, then the Siamese
    wrapper reusing it as the twin backbone.
 7. **Training pipeline**: `train-model` for the calibration-free CNN first
