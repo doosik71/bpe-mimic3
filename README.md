@@ -78,7 +78,9 @@ applies to this project.
 4. Reject physiologically implausible windows (SBP outside `[75, 165]`
    mmHg, DBP outside `[40, 85]` mmHg).
 5. Reject low-periodicity (noisy) windows via autocorrelation thresholding
-   on both PPG and ABP.
+   on both PPG and ABP, and reject flatline/disconnected-sensor PPG windows
+   via a minimum-amplitude check the periodicity test alone can miss (see
+   [docs/data-cleaning.md](docs/data-cleaning.md)).
 6. Drop patients with too few surviving windows or too high a rejection
    rate.
 7. Drop per-patient outlier windows (BP more than ±40 mmHg from that
@@ -122,7 +124,7 @@ bpe-mimic3/
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
 │   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
-│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD over data/dataset
+│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD; also browses in-progress (unsplit) data
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics
 │   ├── check-cuda.bat
 │   ├── print-model[.bat] / print-all-model[.bat]
@@ -144,6 +146,7 @@ bpe-mimic3/
 ├── docs/
 │   ├── method.md                      # source methodology
 │   ├── development-plan.md            # implementation plan & status
+│   ├── data-cleaning.md               # implementation-level QC pipeline detail
 │   └── evaluation-result*.md          # written once models are evaluated
 ├── data/                              # git-ignored, local only
 │   ├── mimic3/                        # read-only symlink — DO NOT MODIFY

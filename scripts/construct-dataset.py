@@ -30,7 +30,7 @@ from bpe.preprocess.pipeline import (
     DEFAULT_WINDOW_SEC,
     build_dataset,
 )
-from bpe.preprocess.quality import DEFAULT_DBP_RANGE, DEFAULT_SBP_RANGE
+from bpe.preprocess.quality import DEFAULT_DBP_RANGE, DEFAULT_MIN_PPG_STD, DEFAULT_SBP_RANGE
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,6 +68,14 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_ABP_PERIODICITY_THRESHOLD,
         help="Minimum ABP periodicity score to keep a window (default: %(default)s; unvalidated, see docs/development-plan.md §7)",
+    )
+    parser.add_argument(
+        "--min-ppg-std",
+        type=float,
+        default=DEFAULT_MIN_PPG_STD,
+        help="Minimum PPG window standard deviation to reject flatline/disconnected-sensor "
+        "windows that periodicity scoring alone can miss (default: %(default)s; "
+        "see docs/data-cleaning.md)",
     )
     parser.add_argument("--min-valid-windows", type=int, default=DEFAULT_MIN_VALID_WINDOWS)
     parser.add_argument("--max-reject-fraction", type=float, default=DEFAULT_MAX_REJECT_FRACTION)
@@ -127,6 +135,7 @@ def main() -> None:
         dbp_range=tuple(args.dbp_range),
         ppg_periodicity_threshold=args.ppg_periodicity_threshold,
         abp_periodicity_threshold=args.abp_periodicity_threshold,
+        min_ppg_std=args.min_ppg_std,
         min_valid_windows=args.min_valid_windows,
         max_reject_fraction=args.max_reject_fraction,
         max_bp_deviation=args.max_bp_deviation,

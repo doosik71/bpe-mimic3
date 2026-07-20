@@ -9,6 +9,21 @@ import numpy as np
 DEFAULT_SBP_RANGE = (75.0, 165.0)
 DEFAULT_DBP_RANGE = (40.0, 85.0)
 
+# A disconnected/malfunctioning PPG sensor can output a near-constant
+# reading with only tiny quantization jitter. That jitter can itself be
+# highly regular, so periodicity_score alone (which normalizes by the
+# window's own variance and is therefore scale-invariant) can score such a
+# flatline as "periodic". This catches what that can't: an absolute
+# minimum-amplitude requirement. 0.005 is set empirically -- across the
+# first ~100 converted subjects, dead-sensor windows clustered tightly
+# around std ~= 0.00012 with a clean gap before real pulsatile signal
+# resumed around std ~= 0.007-0.15 (see docs/data-cleaning.md).
+DEFAULT_MIN_PPG_STD = 0.005
+
+
+def has_sufficient_amplitude(x: np.ndarray, min_std: float = DEFAULT_MIN_PPG_STD) -> bool:
+    return float(np.std(x)) >= min_std
+
 
 def physiological_range_ok(
     sbp: float,

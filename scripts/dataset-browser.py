@@ -28,6 +28,10 @@ from bpe.features import compute_psd, compute_spectrogram, power_to_db
 
 DEFAULT_DATASET_DIR = Path("data/dataset")
 SPLIT_NAMES = ("train", "val", "test")
+# Virtual "split": subjects converted by construct-dataset but not yet moved
+# into train/val/test by finalize_split -- i.e. flat npz directly under
+# dataset_dir. Lets this browser inspect a dataset that's still being built.
+UNSPLIT_NAME = "unsplit"
 
 
 def _peek_window_count(path: Path) -> int:
@@ -44,6 +48,7 @@ class DatasetBrowserApp(tk.Tk):
 
         self.current_subject_id: Optional[str] = None
         self.current_arrays: Optional[dict] = None
+        self._last_plot: Optional[tuple[np.ndarray, float, str]] = None
         self._meta_queue: "queue.Queue[tuple[str, int, int]]" = queue.Queue()
 
         self._build_widgets()
@@ -74,6 +79,9 @@ class DatasetBrowserApp(tk.Tk):
         )
         self.split_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
         self.split_combo.bind("<<ComboboxSelected>>", lambda e: self._on_split_change())
+        # Re-scans the available splits and the current split's subject list --
+        # useful while construct-dataset is still running in another process.
+        ttk.Button(split_row, text="Refresh", command=self._refresh_splits).pack(side=tk.LEFT, padx=(4, 0))
 
         vpaned = ttk.PanedWindow(parent, orient=tk.VERTICAL)
         vpaned.pack(fill=tk.BOTH, expand=True)
@@ -81,8 +89,10 @@ class DatasetBrowserApp(tk.Tk):
         subject_frame = ttk.Frame(vpaned)
         vpaned.add(subject_frame, weight=3)
         ttk.Label(subject_frame, text="Subjects").pack(anchor=tk.W)
+        subject_tree_row = ttk.Frame(subject_frame)
+        subject_tree_row.pack(fill=tk.BOTH, expand=True)
         self.subject_tree = ttk.Treeview(
-            subject_frame, columns=("windows", "size"), show="tree headings", selectmode="browse"
+            subject_tree_row, columns=("windows", "size"), show="tree headings", selectmode="browse"
         )
         self.subject_tree.heading("#0", text="subject_id", command=lambda: self._sort_subjects("#0"))
         self.subject_tree.heading("windows", text="windows", command=lambda: self._sort_subjects("windows"))
@@ -90,20 +100,28 @@ class DatasetBrowserApp(tk.Tk):
         self.subject_tree.column("#0", width=110, anchor=tk.W)
         self.subject_tree.column("windows", width=70, anchor=tk.E)
         self.subject_tree.column("size", width=80, anchor=tk.E)
-        self.subject_tree.pack(fill=tk.BOTH, expand=True)
+        subject_scroll = ttk.Scrollbar(subject_tree_row, orient=tk.VERTICAL, command=self.subject_tree.yview)
+        self.subject_tree.configure(yscrollcommand=subject_scroll.set)
+        self.subject_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        subject_scroll.pack(side=tk.LEFT, fill=tk.Y)
         self.subject_tree.bind("<<TreeviewSelect>>", lambda e: self._on_subject_select())
 
         segment_frame = ttk.Frame(vpaned)
         vpaned.add(segment_frame, weight=4)
         ttk.Label(segment_frame, text="Windows").pack(anchor=tk.W)
+        segment_tree_row = ttk.Frame(segment_frame)
+        segment_tree_row.pack(fill=tk.BOTH, expand=True)
         self.segment_tree = ttk.Treeview(
-            segment_frame, columns=("index", "sbp", "dbp"), show="headings", selectmode="browse"
+            segment_tree_row, columns=("index", "sbp", "dbp"), show="headings", selectmode="browse"
         )
         for col, label, width in (("index", "#", 70), ("sbp", "SBP", 70), ("dbp", "DBP", 70)):
             self.segment_tree.heading(col, text=label)
             self.segment_tree.column(col, width=width, anchor=tk.E)
         self.segment_tree.tag_configure("calib", background="#fff2cc")
-        self.segment_tree.pack(fill=tk.BOTH, expand=True)
+        segment_scroll = ttk.Scrollbar(segment_tree_row, orient=tk.VERTICAL, command=self.segment_tree.yview)
+        self.segment_tree.configure(yscrollcommand=segment_scroll.set)
+        self.segment_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        segment_scroll.pack(side=tk.LEFT, fill=tk.Y)
         self.segment_tree.bind("<<TreeviewSelect>>", lambda e: self._on_segment_select())
 
         self.bind("<Up>", lambda e: self._step_subject(-1))
@@ -112,8 +130,20 @@ class DatasetBrowserApp(tk.Tk):
         self.bind("<Right>", lambda e: self._step_segment(1))
 
     def _build_right_panel(self, parent: ttk.Frame) -> None:
+        top_row = ttk.Frame(parent)
+        top_row.pack(fill=tk.X)
         self.info_var = tk.StringVar(value="Select a subject and window to inspect.")
-        ttk.Label(parent, textvariable=self.info_var, anchor=tk.W).pack(fill=tk.X)
+        ttk.Label(top_row, textvariable=self.info_var, anchor=tk.W).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Off by default: the colorbar otherwise shrinks the spectrogram axes,
+        # so its time axis no longer spans the same width as the waveform
+        # plot above it -- misleading when comparing them at the same time.
+        self.show_colorbar_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            top_row,
+            text="Show spectrogram scale bar",
+            variable=self.show_colorbar_var,
+            command=self._on_toggle_colorbar,
+        ).pack(side=tk.RIGHT)
 
         self.fig = Figure(figsize=(8, 9))
         self.canvas = FigureCanvasTkAgg(self.fig, master=parent)
@@ -124,18 +154,26 @@ class DatasetBrowserApp(tk.Tk):
 
     # -- data loading --------------------------------------------------------
 
+    def _split_dir(self, split: str) -> Path:
+        """`unsplit` is a virtual split: subjects sit flat directly under
+        `dataset_dir`, not yet moved into a split subdirectory."""
+        return self.dataset_dir if split == UNSPLIT_NAME else self.dataset_dir / split
+
     def _refresh_splits(self) -> None:
+        previous = self.split_var.get()
         available = [s for s in SPLIT_NAMES if (self.dataset_dir / s).is_dir()]
+        if self.dataset_dir.is_dir() and any(self.dataset_dir.glob("*.npz")):
+            available.append(UNSPLIT_NAME)
         if not available:
             messagebox.showwarning(
                 "No dataset found",
-                f"No train/val/test subdirectories under {self.dataset_dir}.\n"
+                f"No npz files found under {self.dataset_dir} (flat or in train/val/test).\n"
                 "Run construct-dataset first.",
             )
             self.split_combo["values"] = ()
             return
         self.split_combo["values"] = available
-        self.split_var.set(available[0])
+        self.split_var.set(previous if previous in available else available[0])
         self._on_split_change()
 
     def _on_split_change(self) -> None:
@@ -146,7 +184,7 @@ class DatasetBrowserApp(tk.Tk):
         self.current_arrays = None
         if not split:
             return
-        paths = sorted((self.dataset_dir / split).glob("*.npz"))
+        paths = sorted(self._split_dir(split).glob("*.npz"))
         for path in paths:
             self.subject_tree.insert("", tk.END, iid=path.stem, text=path.stem, values=("...", "..."))
         threading.Thread(target=self._scan_metadata, args=(paths,), daemon=True).start()
@@ -198,7 +236,7 @@ class DatasetBrowserApp(tk.Tk):
             return
         subject_id = selection[0]
         split = self.split_var.get()
-        path = self.dataset_dir / split / f"{subject_id}.npz"
+        path = self._split_dir(split) / f"{subject_id}.npz"
         try:
             with np.load(path) as data:
                 arrays = {key: data[key] for key in ("x", "y", "calib_x", "calib_y", "fs")}
@@ -244,6 +282,10 @@ class DatasetBrowserApp(tk.Tk):
         )
         self._plot_segment(x, fs, f"{self.current_subject_id} -- {label}")
 
+    def _on_toggle_colorbar(self) -> None:
+        if self._last_plot is not None:
+            self._plot_segment(*self._last_plot)
+
     # -- keyboard navigation --------------------------------------------------
 
     def _step_subject(self, delta: int) -> None:
@@ -271,6 +313,7 @@ class DatasetBrowserApp(tk.Tk):
     # -- plotting --------------------------------------------------------
 
     def _plot_segment(self, x: np.ndarray, fs: float, title_suffix: str) -> None:
+        self._last_plot = (x, fs, title_suffix)
         self.fig.clf()
         ax_wave, ax_spec, ax_psd = self.fig.subplots(3, 1)
 
@@ -285,7 +328,10 @@ class DatasetBrowserApp(tk.Tk):
         ax_spec.set_title("Spectrogram (1 s Hamming, 95% overlap)")
         ax_spec.set_xlabel("Time (s)")
         ax_spec.set_ylabel("Frequency (Hz)")
-        self.fig.colorbar(mesh, ax=ax_spec, label="dB")
+        # The colorbar steals width from ax_spec, breaking its time-axis
+        # alignment with ax_wave right above it -- keep it opt-in.
+        if self.show_colorbar_var.get():
+            self.fig.colorbar(mesh, ax=ax_spec, label="dB")
 
         freqs_psd, psd = compute_psd(x, fs)
         ax_psd.plot(freqs_psd, power_to_db(psd), color="tab:red", linewidth=0.8)

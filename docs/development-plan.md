@@ -62,7 +62,7 @@ bpe-mimic3/
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
 │   ├── construct-dataset[.bat]       # build data/dataset (100 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
-│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD over data/dataset
+│   ├── dataset-browser[.bat]         # GUI: waveform + spectrogram + PSD; also browses in-progress (unsplit) data
 │   ├── dataset-statistic[.bat]       # split/QC-retention statistics
 │   ├── check-cuda.bat
 │   ├── print-model[.bat] / print-all-model[.bat]
@@ -84,6 +84,7 @@ bpe-mimic3/
 ├── docs/
 │   ├── method.md                     # source methodology (existing)
 │   ├── development-plan.md           # this document
+│   ├── data-cleaning.md              # implementation-level QC pipeline detail
 │   └── evaluation-result*.md         # written once models are evaluated
 ├── data/                             # git-ignored
 │   ├── mimic3/                       # read-only symlink, DO NOT MODIFY
@@ -97,7 +98,10 @@ bpe-mimic3/
 
 ## 4. Preprocessing Pipeline (method.md, adapted to 8 s / 100 Hz)
 
-Applied per candidate record, then aggregated per patient:
+Applied per candidate record, then aggregated per patient. See
+[docs/data-cleaning.md](data-cleaning.md) for the implementation-level
+detail (exact function per step, parameter table, and a case study of a
+filter gap found by inspection).
 
 1. **Indexing** (`build-mimic3-index`): walk `RECORDS-waveforms`, open each
    record's segments with `wfdb`, and record which segments expose **both**
@@ -124,7 +128,14 @@ Applied per candidate record, then aggregated per patient:
    windows (a shorter window naturally yields fewer autocorrelation lags to
    integrate over) rather than reusing the paper's 30 s-calibrated constant;
    `dataset-statistic` reports retention rate vs. threshold to support this
-   tuning.
+   tuning. This check is scale-invariant (normalized by the window's own
+   variance), so on its own it cannot catch a flatline signal whose tiny
+   residual noise happens to repeat -- see step 6a.
+6a. **Minimum-amplitude filter (PPG)**: reject windows whose PPG standard
+   deviation falls below `min_ppg_std` (default 0.005, empirically derived
+   -- see [docs/data-cleaning.md](data-cleaning.md)). Added after finding a
+   disconnected/malfunctioning-sensor flatline pass the periodicity filter
+   in step 6; catches what that check structurally can't.
 7. **Patient-level exclusion**: drop a patient if fewer than *N* valid
    windows remain, or more than 95 % of their windows were rejected. The
    paper used `N = 100` for 30 s windows (~50 min of usable signal); scaled

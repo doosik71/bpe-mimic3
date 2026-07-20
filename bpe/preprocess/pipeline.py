@@ -48,7 +48,9 @@ from bpe.preprocess.patient import (
 )
 from bpe.preprocess.quality import (
     DEFAULT_DBP_RANGE,
+    DEFAULT_MIN_PPG_STD,
     DEFAULT_SBP_RANGE,
+    has_sufficient_amplitude,
     is_periodic,
     physiological_range_ok,
 )
@@ -161,6 +163,7 @@ def process_patient(
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
+    min_ppg_std: float = DEFAULT_MIN_PPG_STD,
     min_valid_windows: int = DEFAULT_MIN_VALID_WINDOWS,
     max_reject_fraction: float = DEFAULT_MAX_REJECT_FRACTION,
     max_bp_deviation: float = DEFAULT_MAX_BP_DEVIATION,
@@ -210,6 +213,12 @@ def process_patient(
             ppg_win = ppg_windows[i]
             bp_win = bp_windows[i]
             if np.isnan(ppg_win).any() or np.isnan(bp_win).any():
+                continue
+            # A disconnected/malfunctioning PPG sensor can produce a
+            # near-flatline reading whose tiny quantization jitter still
+            # scores as "periodic" (periodicity_score is scale-invariant),
+            # so this absolute-amplitude gate is needed in addition to it.
+            if not has_sufficient_amplitude(ppg_win, min_ppg_std):
                 continue
             labels = compute_sbp_dbp(bp_win, target_fs)
             if labels is None:
@@ -345,6 +354,7 @@ def convert_dataset(
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
+    min_ppg_std: float = DEFAULT_MIN_PPG_STD,
     min_valid_windows: int = DEFAULT_MIN_VALID_WINDOWS,
     max_reject_fraction: float = DEFAULT_MAX_REJECT_FRACTION,
     max_bp_deviation: float = DEFAULT_MAX_BP_DEVIATION,
@@ -395,6 +405,7 @@ def convert_dataset(
             dbp_range=dbp_range,
             ppg_periodicity_threshold=ppg_periodicity_threshold,
             abp_periodicity_threshold=abp_periodicity_threshold,
+            min_ppg_std=min_ppg_std,
             min_valid_windows=min_valid_windows,
             max_reject_fraction=max_reject_fraction,
             max_bp_deviation=max_bp_deviation,
@@ -523,6 +534,7 @@ def build_dataset(
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
+    min_ppg_std: float = DEFAULT_MIN_PPG_STD,
     min_valid_windows: int = DEFAULT_MIN_VALID_WINDOWS,
     max_reject_fraction: float = DEFAULT_MAX_REJECT_FRACTION,
     max_bp_deviation: float = DEFAULT_MAX_BP_DEVIATION,
@@ -552,6 +564,7 @@ def build_dataset(
             dbp_range=dbp_range,
             ppg_periodicity_threshold=ppg_periodicity_threshold,
             abp_periodicity_threshold=abp_periodicity_threshold,
+            min_ppg_std=min_ppg_std,
             min_valid_windows=min_valid_windows,
             max_reject_fraction=max_reject_fraction,
             max_bp_deviation=max_bp_deviation,
