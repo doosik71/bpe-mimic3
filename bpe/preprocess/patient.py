@@ -5,6 +5,7 @@ See docs/development-plan.md §4 steps 7-9.
 
 from __future__ import annotations
 
+import statistics
 from typing import Optional, Sequence
 
 # The paper requires >=100 valid 30 s windows per patient; scaled to 8 s
@@ -36,8 +37,9 @@ def outlier_keep_mask(
 ) -> list[bool]:
     """`labels` must already be range/periodicity-valid windows in
     chronological order. The first window is the patient's reference point
-    (kept unconditionally) and later becomes the calibration pair -- see
-    `calibration_index`."""
+    for outlier rejection (kept unconditionally, since it can't deviate from
+    itself) -- a separate concern from which window becomes the calibration
+    pair, see `calibration_index`."""
     if not labels:
         return []
     ref_sbp, ref_dbp = labels[0]
@@ -47,11 +49,28 @@ def outlier_keep_mask(
     ]
 
 
-def calibration_index(keep_mask: Sequence[bool]) -> Optional[int]:
-    """Index of the chronologically-first surviving window, used as the
-    calibration anchor. It is also kept in the regular training pool
-    (docs/development-plan.md's calibration-window-reuse decision)."""
-    for i, keep in enumerate(keep_mask):
-        if keep:
-            return i
-    return None
+def calibration_index(
+    labels: Sequence[tuple[float, float]],
+    keep_mask: Sequence[bool],
+) -> Optional[int]:
+    """Index of the kept window whose (SBP, DBP) is closest to the patient's
+    own median BP, used as the calibration anchor. Picking a "representative"
+    window this way avoids anchoring the Siamese model's calibration pair on
+    the chronologically-first window, which can itself be an atypical
+    reading (e.g. taken during an unstable admission period) rather than
+    typical of the patient. It is also kept in the regular training pool
+    (docs/development-plan.md's calibration-window-reuse decision).
+
+    Note this is independent of the outlier-removal reference point in
+    `outlier_keep_mask`, which still anchors on the chronologically-first
+    window -- only the calibration *pair* selection changes here.
+    """
+    kept_indices = [i for i, keep in enumerate(keep_mask) if keep]
+    if not kept_indices:
+        return None
+    median_sbp = statistics.median(labels[i][0] for i in kept_indices)
+    median_dbp = statistics.median(labels[i][1] for i in kept_indices)
+    return min(
+        kept_indices,
+        key=lambda i: abs(labels[i][0] - median_sbp) + abs(labels[i][1] - median_dbp),
+    )

@@ -41,10 +41,11 @@ toward `n_valid`) the moment it fails any check:
 | 3.2 | PPG has enough amplitude          | `has_sufficient_amplitude` (`quality.py`) | See "Flatline PPG" below — a disconnected/malfunctioning sensor can output a near-constant reading.                           |
 | 3.3 | SBP/DBP can be labeled            | `compute_sbp_dbp` (`labels.py`)           | Peak/trough detection on the ABP window; returns `None` (drop) if fewer than 3 systolic peaks or diastolic troughs are found. |
 | 3.4 | SBP/DBP physiologically plausible | `physiological_range_ok` (`quality.py`)   | SBP ∈ `[75, 165]` mmHg, DBP ∈ `[40, 85]` mmHg (docs/method-spectrogram-cnn.md's bounds, unchanged by window length).          |
-| 3.5 | PPG is periodic                   | `is_periodic` (`quality.py`)              | Autocorrelation-based; a real pulse signal stays correlated across many lags, noise decays quickly.                           |
-| 3.6 | ABP is periodic                   | `is_periodic` (`quality.py`)              | Same check, applied to the arterial pressure window.                                                                          |
+| 3.5 | Pulse pressure plausible          | `pulse_pressure_ok` (`quality.py`)        | `SBP - DBP` ∈ `[20, 100]` mmHg. SBP and DBP can each pass 3.4 individually while their *difference* is still implausible (e.g. a damped line reading them near-equal, or a mislabeled peak/trough pair) -- gap first flagged in `dataset-statistic.md` §5.        |
+| 3.6 | PPG is periodic                   | `is_periodic` (`quality.py`)              | Autocorrelation-based; a real pulse signal stays correlated across many lags, noise decays quickly.                           |
+| 3.7 | ABP is periodic                   | `is_periodic` (`quality.py`)              | Same check, applied to the arterial pressure window.                                                                          |
 
-A window that survives all six becomes one row of the patient's
+A window that survives all seven becomes one row of the patient's
 `(x, y)` pool.
 
 ### 4. Per-patient filters
@@ -59,13 +60,20 @@ Applied once, after every segment's windows have been filtered:
   patient's chronologically-first surviving window as a reference, drop any
   later window whose SBP or DBP deviates more than `max_bp_deviation`
   (default 40 mmHg) from it.
-- **Calibration window** (`calibration_index`, `patient.py`): the
-  chronologically-first surviving window (index 0 after outlier removal,
-  since a window can't deviate from itself) becomes the patient's
-  calibration pair, stored in the output npz as `calib_x`/`calib_y`. It is
-  *also* kept in the regular `(x, y)` pool — see
-  [development-plan.md](development-plan.md) §1's calibration-window-reuse
-  decision.
+- **Calibration window** (`calibration_index`, `patient.py`): among the
+  outlier-filtered surviving windows, the one whose `(SBP, DBP)` is closest
+  (by summed absolute difference) to the patient's own **median** SBP/DBP
+  becomes the calibration pair, stored in the output npz as
+  `calib_x`/`calib_y`. This is independent of the outlier-removal reference
+  point above (still the chronologically-first window) -- only which window
+  is *chosen as the calibration anchor* changed. Previously this was
+  unconditionally the chronologically-first surviving window, which
+  `dataset-statistic.md` §5 found was not always representative (tails up to
+  ±35 mmHg from the patient's own mean); picking the median-closest window
+  instead avoids anchoring the Siamese model on a window that happens to be
+  atypical for that patient. The calibration window is *also* kept in the
+  regular `(x, y)` pool — see [development-plan.md](development-plan.md)
+  §1's calibration-window-reuse decision.
 
 ### 5. Output
 
@@ -80,6 +88,7 @@ and where these files land (`data/dataset/{train,val,test}/` after
 | Parameter                                                | Default                    | Status                                                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sbp_range`, `dbp_range`                                 | `[75,165]`, `[40,85]` mmHg | From method-spectrogram-cnn.md, not window-length-dependent.                                                                                                                                                                      |
+| `pulse_pressure_range`                                   | `[20,100]` mmHg            | **Added** after `dataset-statistic.md` §5 found a small number of windows with implausible (near-zero or negative) pulse pressure despite SBP/DBP each individually passing `sbp_range`/`dbp_range`. Not yet validated at full-dataset scale -- re-run `dataset-statistic` after a `construct-dataset --force` rebuild to check its actual rejection rate. |
 | `max_bp_deviation`                                       | 40 mmHg                    | From method-spectrogram-cnn.md, not window-length-dependent.                                                                                                                                                                      |
 | `min_ppg_std`                                            | 0.005                      | **Empirically derived** (see case study below) from the observed bimodal std distribution across the first ~100 converted subjects. Worth re-checking at full-dataset scale.                                                      |
 | `ppg_periodicity_threshold`, `abp_periodicity_threshold` | 0.05, 0.05                 | **Unvalidated placeholders**, carried over from the 30 s-window paper without being re-tuned for 8 s windows. `periodicity_score` integrates over one lag per sample, so the 1000-sample change shifts its typical magnitude too. |
@@ -92,6 +101,18 @@ configured thresholds. Note it reports *current* retention, not retention
 *as a function of* threshold (docs/dataset-analysis.md #12) -- that would
 require re-running the per-window QC filters against raw signals under
 alternative threshold values, which the tool doesn't do yet.
+
+## Observed attrition
+
+A full-scale run measured **55.2% window-level attrition** and **17.8%
+subject-level attrition** -- milder than the ~90-95% figure carried over
+from the source paper's 30 s-window pipeline that this doc and the README
+previously assumed. See [dataset-statistic.md](dataset-statistic.md) §4.3/§5
+for the full measurement. That run predates the `pulse_pressure_range`
+filter above and the calibration-window selection change, so the exact
+figures will shift somewhat (attrition likely rises slightly) once
+`dataset-statistic` is re-run against a dataset rebuilt with
+`construct-dataset --force`.
 
 ## Case study: flatline PPG passing the periodicity filter
 

@@ -9,6 +9,12 @@ import numpy as np
 DEFAULT_SBP_RANGE = (75.0, 165.0)
 DEFAULT_DBP_RANGE = (40.0, 85.0)
 
+# Pulse pressure (SBP - DBP) outside this band is not a plausible arterial
+# waveform even when SBP and DBP individually pass their own range checks
+# (e.g. a near-equal SBP/DBP pair from a damped line, or a spuriously wide
+# gap from a mislabeled peak/trough). Added per docs/data-cleaning.md.
+DEFAULT_PULSE_PRESSURE_RANGE = (20.0, 100.0)
+
 # A disconnected/malfunctioning PPG sensor can output a near-constant
 # reading with only tiny quantization jitter. That jitter can itself be
 # highly regular, so periodicity_score alone (which normalizes by the
@@ -32,6 +38,15 @@ def physiological_range_ok(
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
 ) -> bool:
     return sbp_range[0] <= sbp <= sbp_range[1] and dbp_range[0] <= dbp <= dbp_range[1]
+
+
+def pulse_pressure_ok(
+    sbp: float,
+    dbp: float,
+    pulse_pressure_range: tuple[float, float] = DEFAULT_PULSE_PRESSURE_RANGE,
+) -> bool:
+    pulse_pressure = sbp - dbp
+    return pulse_pressure_range[0] <= pulse_pressure <= pulse_pressure_range[1]
 
 
 def normalized_autocorrelation(x: np.ndarray) -> np.ndarray:

@@ -17,9 +17,9 @@ from typing import Optional
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from bpe.dataset import CalibrationFreeDataset, CalibrationPairDataset, DEFAULT_DATASET_DIR
+from bpe.dataset import CalibrationFreeDataset, CalibrationPairDataset, DEFAULT_DATASET_DIR, subject_balanced_weights
 from bpe.models.registry import (
     build_calibration_based_model,
     build_calibration_free_model,
@@ -137,6 +137,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--no-normalize", action="store_true", help="Skip per-window z-score normalization")
     parser.add_argument(
+        "--no-subject-balanced-sampling",
+        action="store_true",
+        help="Sample training windows uniformly instead of weighting each window by "
+        "1/(subject's window count) (default: balanced -- see bpe.dataset.subject_balanced_weights, "
+        "since windows per subject range from ~375 to over a million)",
+    )
+    parser.add_argument(
         "--resume", type=Path, default=None, help="Path to a checkpoint .pt to resume from (default: start a fresh run)"
     )
     return parser.parse_args()
@@ -147,6 +154,7 @@ def main() -> None:
     _set_seed(args.seed)
     device = _resolve_device(args.device)
     normalize = not args.no_normalize
+    subject_balanced_sampling = not args.no_subject_balanced_sampling
     out_dir = args.models_dir / args.model
 
     print_run_info(
@@ -163,6 +171,7 @@ def main() -> None:
             "patience": args.patience,
             "seed": args.seed,
             "normalize": normalize,
+            "subject-balanced sampling": subject_balanced_sampling,
             "workers": args.workers,
             "resume": args.resume if args.resume is not None else "(none, fresh run)",
         },
@@ -185,9 +194,18 @@ def main() -> None:
         val_set = CalibrationFreeDataset(args.dataset_dir, "val", normalize=normalize)
         step_fn = calibration_free_step
 
-    train_loader = DataLoader(
-        train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, drop_last=True
-    )
+    if subject_balanced_sampling:
+        generator = torch.Generator().manual_seed(args.seed)
+        sampler = WeightedRandomSampler(
+            subject_balanced_weights(train_set), num_samples=len(train_set), replacement=True, generator=generator
+        )
+        train_loader = DataLoader(
+            train_set, batch_size=args.batch_size, sampler=sampler, num_workers=args.workers, drop_last=True
+        )
+    else:
+        train_loader = DataLoader(
+            train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.workers, drop_last=True
+        )
     val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
     history = train(

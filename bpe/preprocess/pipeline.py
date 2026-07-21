@@ -49,10 +49,12 @@ from bpe.preprocess.patient import (
 from bpe.preprocess.quality import (
     DEFAULT_DBP_RANGE,
     DEFAULT_MIN_PPG_STD,
+    DEFAULT_PULSE_PRESSURE_RANGE,
     DEFAULT_SBP_RANGE,
     has_sufficient_amplitude,
     is_periodic,
     physiological_range_ok,
+    pulse_pressure_ok,
 )
 from bpe.preprocess.resample import resample_signal
 from bpe.preprocess.window import window_signal
@@ -161,6 +163,7 @@ def process_patient(
     stride_sec: float = DEFAULT_STRIDE_SEC,
     sbp_range: tuple[float, float] = DEFAULT_SBP_RANGE,
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
+    pulse_pressure_range: tuple[float, float] = DEFAULT_PULSE_PRESSURE_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
     min_ppg_std: float = DEFAULT_MIN_PPG_STD,
@@ -226,6 +229,8 @@ def process_patient(
             sbp, dbp = labels
             if not physiological_range_ok(sbp, dbp, sbp_range, dbp_range):
                 continue
+            if not pulse_pressure_ok(sbp, dbp, pulse_pressure_range):
+                continue
             if not is_periodic(ppg_win, ppg_periodicity_threshold):
                 continue
             if not is_periodic(bp_win, abp_periodicity_threshold):
@@ -238,7 +243,7 @@ def process_patient(
         return None, n_total
 
     keep_mask = outlier_keep_mask(valid_labels, max_bp_deviation)
-    calib_idx = calibration_index(keep_mask)
+    calib_idx = calibration_index(valid_labels, keep_mask)
     if calib_idx is None:
         return None, n_total  # defensive; outlier_keep_mask always keeps index 0
 
@@ -357,6 +362,7 @@ def convert_dataset(
     stride_sec: float = DEFAULT_STRIDE_SEC,
     sbp_range: tuple[float, float] = DEFAULT_SBP_RANGE,
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
+    pulse_pressure_range: tuple[float, float] = DEFAULT_PULSE_PRESSURE_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
     min_ppg_std: float = DEFAULT_MIN_PPG_STD,
@@ -413,6 +419,7 @@ def convert_dataset(
             stride_sec=stride_sec,
             sbp_range=sbp_range,
             dbp_range=dbp_range,
+            pulse_pressure_range=pulse_pressure_range,
             ppg_periodicity_threshold=ppg_periodicity_threshold,
             abp_periodicity_threshold=abp_periodicity_threshold,
             min_ppg_std=min_ppg_std,
@@ -544,6 +551,7 @@ def build_dataset(
     stride_sec: float = DEFAULT_STRIDE_SEC,
     sbp_range: tuple[float, float] = DEFAULT_SBP_RANGE,
     dbp_range: tuple[float, float] = DEFAULT_DBP_RANGE,
+    pulse_pressure_range: tuple[float, float] = DEFAULT_PULSE_PRESSURE_RANGE,
     ppg_periodicity_threshold: float = DEFAULT_PPG_PERIODICITY_THRESHOLD,
     abp_periodicity_threshold: float = DEFAULT_ABP_PERIODICITY_THRESHOLD,
     min_ppg_std: float = DEFAULT_MIN_PPG_STD,
@@ -574,6 +582,7 @@ def build_dataset(
             stride_sec=stride_sec,
             sbp_range=sbp_range,
             dbp_range=dbp_range,
+            pulse_pressure_range=pulse_pressure_range,
             ppg_periodicity_threshold=ppg_periodicity_threshold,
             abp_periodicity_threshold=abp_periodicity_threshold,
             min_ppg_std=min_ppg_std,

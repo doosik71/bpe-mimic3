@@ -30,7 +30,12 @@ from bpe.preprocess.pipeline import (
     DEFAULT_WINDOW_SEC,
     build_dataset,
 )
-from bpe.preprocess.quality import DEFAULT_DBP_RANGE, DEFAULT_MIN_PPG_STD, DEFAULT_SBP_RANGE
+from bpe.preprocess.quality import (
+    DEFAULT_DBP_RANGE,
+    DEFAULT_MIN_PPG_STD,
+    DEFAULT_PULSE_PRESSURE_RANGE,
+    DEFAULT_SBP_RANGE,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,6 +63,14 @@ def parse_args() -> argparse.Namespace:
         default=list(DEFAULT_DBP_RANGE),
         metavar=("MIN", "MAX"),
         help="Physiologically plausible DBP range in mmHg (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--pulse-pressure-range",
+        type=float,
+        nargs=2,
+        default=list(DEFAULT_PULSE_PRESSURE_RANGE),
+        metavar=("MIN", "MAX"),
+        help="Plausible pulse-pressure (SBP-DBP) range in mmHg (default: %(default)s)",
     )
     parser.add_argument(
         "--ppg-periodicity-threshold",
@@ -150,6 +163,7 @@ def main() -> None:
         stride_sec=args.stride_sec,
         sbp_range=tuple(args.sbp_range),
         dbp_range=tuple(args.dbp_range),
+        pulse_pressure_range=tuple(args.pulse_pressure_range),
         ppg_periodicity_threshold=args.ppg_periodicity_threshold,
         abp_periodicity_threshold=args.abp_periodicity_threshold,
         min_ppg_std=args.min_ppg_std,

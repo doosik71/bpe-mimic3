@@ -45,7 +45,23 @@ training step used:
 | `--device`                      | auto           | `auto` \| `cpu` \| `cuda` \| `cuda:N`.                         |
 | `--workers`                     | 0              | DataLoader worker processes (see below).                       |
 | `--no-normalize`                | off            | Skip per-window z-score normalization.                         |
+| `--no-subject-balanced-sampling`| off            | Sample training windows uniformly instead of the default subject-balanced `WeightedRandomSampler` (see below). |
 | `--resume`                      | (fresh)        | Path to a checkpoint `.pt` to resume from.                     |
+
+### Subject-balanced training sampler
+
+Windows per subject are highly skewed (`dataset-statistic` found up to 40x
+max/median, top 10% of subjects holding ~46% of all windows -- see
+[dataset-statistic.md](dataset-statistic.md) §5), so plain uniform per-window
+shuffling would let a handful of long-stay subjects dominate every training
+batch. By default, `train_loader` instead uses a `WeightedRandomSampler`
+seeded from `bpe.dataset.subject_balanced_weights(train_set)`, which weights
+each window by `1/(its subject's window count)` so every subject has the
+same expected total sampling weight per epoch regardless of how many windows
+they contributed. This only affects the **training** loader -- validation
+still iterates every window once, unweighted, so eval metrics reflect the
+true window distribution. Pass `--no-subject-balanced-sampling` to fall back
+to plain uniform `shuffle=True` sampling.
 
 ## Training loop (`bpe/trainer.py`)
 

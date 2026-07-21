@@ -78,7 +78,8 @@ applies to this project.
 3. Slice into 8 s windows and label each window's SBP/DBP from the ABP
    window's peak/trough statistics.
 4. Reject physiologically implausible windows (SBP outside `[75, 165]`
-   mmHg, DBP outside `[40, 85]` mmHg).
+   mmHg, DBP outside `[40, 85]` mmHg, or pulse pressure `SBP - DBP` outside
+   `[20, 100]` mmHg).
 5. Reject low-periodicity (noisy) windows via autocorrelation thresholding
    on both PPG and ABP, and reject flatline/disconnected-sensor PPG windows
    via a minimum-amplitude check the periodicity test alone can miss (see
@@ -87,15 +88,23 @@ applies to this project.
    rate.
 7. Drop per-patient outlier windows (BP more than ±40 mmHg from that
    patient's first valid window).
-8. Keep each patient's first valid window as their **calibration pair**
-   (PPG segment + true SBP/DBP) for the calibration-based model.
+8. Keep, as each patient's **calibration pair** (PPG segment + true
+   SBP/DBP) for the calibration-based model, the surviving window whose BP
+   is closest to that patient's own median SBP/DBP — a more representative
+   anchor than the chronologically-first window (see
+   [docs/data-cleaning.md](docs/data-cleaning.md)).
 9. Split by **patient** (not by window) into train/60% val/20% test/20% to
    prevent leakage.
 
-Expect heavy attrition — on the order of 90 % of raw segments are expected
-to be discarded by this pipeline, similar in spirit to the ~95 % attrition
-reported in the source paper. The processed, PyTorch-ready result is written
-to `data/dataset/{train,val,test}/{subject_id}.npz`; all model training and
+Attrition is real but milder than the source paper's 30 s-window pipeline:
+a full-scale run measured **55.2% window-level** and **17.8%
+subject-level** attrition (vs. an earlier ~90-95% expectation carried over
+from the source paper) — see
+[docs/dataset-statistic.md](docs/dataset-statistic.md) §4.3/§5 for the full
+measurement and its caveats (it predates the pulse-pressure filter above, so
+the exact figures will shift somewhat once re-measured). The processed,
+PyTorch-ready result is written to
+`data/dataset/{train,val,test}/{subject_id}.npz`; all model training and
 evaluation reads only from `data/dataset`, never from `data/mimic3`.
 
 ### Models
@@ -233,10 +242,14 @@ uv run python scripts/dataset-browser.py
 calibration-free model, `spectro_siamese` for the calibration-based model
 (both use spectrogram features -- see [docs/COMMANDS.md](docs/COMMANDS.md)
 for the full list of every registered architecture). Each run writes
-checkpoints and `metrics.csv` to `data/models/<model>/`. See
-[docs/train-model.md](docs/train-model.md) for the module's design, including
-its memory-mapped data loading (which keeps per-process memory low enough to
-run several trainings at once) and crash-reporting behavior.
+checkpoints and `metrics.csv` to `data/models/<model>/`. Training windows are
+sampled with a **subject-balanced sampler** by default (each window weighted
+by `1/(its subject's window count)`, so no small set of long-stay subjects
+dominates a batch — pass `--no-subject-balanced-sampling` for plain uniform
+sampling). See [docs/train-model.md](docs/train-model.md) for the module's
+design, including its memory-mapped data loading (which keeps per-process
+memory low enough to run several trainings at once) and crash-reporting
+behavior.
 
 ```bash
 uv run python scripts/train-model.py --model spectro_cnn

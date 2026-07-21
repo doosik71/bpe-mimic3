@@ -107,9 +107,10 @@ Each analysis below is tagged with the data source it needs:
     baseline).
 20. **Calibration-window BP vs. rest-of-subject BP** — compare
     `calib_y` against the mean/spread of that same subject's full `y` pool;
-    checks whether the first surviving window (used as the calibration
-    reference) is representative or an outlier relative to the subject's
-    later windows.
+    checks whether the calibration reference (the surviving window closest
+    to the subject's own median SBP/DBP, previously the chronologically-first
+    window -- see [data-cleaning.md](data-cleaning.md) §4) is representative
+    or an outlier relative to the subject's later windows.
 21. **PPG amplitude statistics** — per-window std/peak-to-peak of `x`,
     pooled and per subject; a sanity check that the `min_ppg_std` gate
     (0.005) is doing its job and that no near-flatline windows slipped
@@ -125,7 +126,10 @@ Each analysis below is tagged with the data source it needs:
 24. **Total retained signal duration** — sum of `x.shape[0] * 8 s` (window
     count × window length) across all kept windows, compared against the
     total candidate duration from §1.6, giving the final, honest attrition
-    percentage the README currently estimates as "on the order of 90%".
+    percentage the README previously estimated as "on the order of 90%" (a
+    full-scale run has since measured 55.2% window-level / 17.8%
+    subject-level attrition and fixed a 2x overlap-counting bug in this
+    comparison -- see [dataset-statistic.md](dataset-statistic.md) §2.6/§5).
 25. **Age-like drift within subject (chronological check)** — using window
     order within a subject (already sorted chronologically per
     [data-cleaning.md](data-cleaning.md) §1), check whether BP trends

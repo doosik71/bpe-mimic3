@@ -123,6 +123,12 @@ filter gap found by inspection).
 5. **Physiological range filter**: reject windows with SBP outside
    `[75, 165]` mmHg or DBP outside `[40, 85]` mmHg (unchanged from method-spectrogram-cnn.md —
    these bounds are about plausible BP values, not window length).
+5a. **Pulse-pressure filter**: reject windows whose `SBP - DBP` falls
+   outside `[20, 100]` mmHg, even when SBP and DBP individually pass step 5
+   -- added after `dataset-statistic` found a small number of windows with
+   near-zero/negative pulse pressure (a damped line or mislabeled
+   peak/trough pair reading SBP and DBP as nearly equal or inverted); see
+   [docs/data-cleaning.md](data-cleaning.md).
 6. **Autocorrelation-based quality filter**: reject windows where the
    (DC-removed, normalized) autocorrelation of PPG or ABP falls below a
    periodicity threshold. The threshold is **re-tuned empirically** for 8 s
@@ -147,11 +153,15 @@ filter gap found by inspection).
    deviates more than ±40 mmHg from their first valid window's BP (unchanged
    from method-spectrogram-cnn.md — this is a physiological-plausibility bound, not
    window-length-dependent).
-9. **Calibration reference**: each patient's chronologically-first surviving
-   window is retained as the **calibration pair** (`calib_x` = PPG segment,
-   `calib_y` = [SBP, DBP]) used by the Siamese model in §5. This window is
-   also kept in the regular `(x, y)` pool, so the calibration-free model
-   trains on it like any other window.
+9. **Calibration reference**: each patient's surviving window whose
+   `(SBP, DBP)` is closest to that patient's own **median** SBP/DBP is
+   retained as the **calibration pair** (`calib_x` = PPG segment, `calib_y`
+   = [SBP, DBP]) used by the Siamese model in §5. This window is also kept
+   in the regular `(x, y)` pool, so the calibration-free model trains on it
+   like any other window. (Previously this was unconditionally the
+   chronologically-first surviving window; changed after `dataset-statistic`
+   found that anchor wasn't always representative of the patient -- see
+   [docs/data-cleaning.md](data-cleaning.md).)
 10. **Patient-level split**: 60/20/20 train/val/test, split by patient (not
     by window) to prevent leakage, matching method-spectrogram-cnn.md and `bpe-vitaldb`.
     Construction is **resumable in two phases** rather than one big
@@ -197,6 +207,14 @@ filter gap found by inspection).
   1/2/5, batch norm after every conv layer, dropout before the first two FC
   layers, ReLU throughout, final FC → linear regression head (SBP, DBP).
 - Loss: L1 (MAE). Optimizer: Adam, batch size 32 (paper default, tunable).
+- Training windows are drawn with a **subject-balanced sampler** by
+  default (`bpe.dataset.subject_balanced_weights` +
+  `torch.utils.data.WeightedRandomSampler`, weighting each window by
+  `1/(its subject's window count)`), not plain uniform per-window shuffling.
+  `dataset-statistic` found windows-per-subject concentration up to 40x
+  max/median (top 10% of subjects holding ~46% of all windows), which would
+  otherwise let a handful of long-stay subjects dominate gradient updates.
+  `train-model --no-subject-balanced-sampling` restores uniform sampling.
 
 ### 5.2 Siamese calibration-based network (method-spectrogram-cnn.md §3)
 

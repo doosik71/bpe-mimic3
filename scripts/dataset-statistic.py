@@ -58,7 +58,7 @@ import pandas as pd
 
 from bpe.io.mimic3 import DEFAULT_INDEX_CSV
 from bpe.preprocess.patient import DEFAULT_MAX_REJECT_FRACTION, DEFAULT_MIN_VALID_WINDOWS
-from bpe.preprocess.pipeline import DEFAULT_DATASET_DIR, DEFAULT_WINDOW_SEC, read_progress
+from bpe.preprocess.pipeline import DEFAULT_DATASET_DIR, DEFAULT_STRIDE_SEC, DEFAULT_WINDOW_SEC, read_progress
 from bpe.preprocess.quality import DEFAULT_MIN_PPG_STD
 from bpe.reporting import print_run_info
 
@@ -405,14 +405,27 @@ def merge_splits(raw: dict[str, dict]) -> dict:
     }
 
 
-def compute_split_summary(raw: dict, window_sec: float = DEFAULT_WINDOW_SEC) -> dict:
+def compute_split_summary(
+    raw: dict,
+    window_sec: float = DEFAULT_WINDOW_SEC,
+    stride_sec: float = DEFAULT_STRIDE_SEC,
+) -> dict:
     sbp, dbp = raw["sbp"], raw["dbp"]
     pulse_pressure = sbp - dbp
+
+    # Windows overlap (8 s window / 4 s stride, docs/data-cleaning.md §2), so
+    # counting every window at its full window_sec double-counts the
+    # overlapping half of each -- see docs/dataset-analysis.md §2.6. Each
+    # window covers stride_sec of *new* real time on top of the previous one,
+    # so window_count * stride_sec is the correct elapsed-time estimate
+    # (equivalent to dividing the naive window_count * window_sec figure by
+    # the overlap factor window_sec / stride_sec).
+    total_retained_duration_hr = float(raw["window_counts"].sum() * stride_sec / 3600.0)
 
     summary = {
         "n_subjects": raw["n_subjects"],
         "n_windows": int(raw["window_counts"].sum()),
-        "total_retained_duration_hr": float(raw["window_counts"].sum() * window_sec / 3600.0),
+        "total_retained_duration_hr": total_retained_duration_hr,
         "sbp": _summary_stats(sbp),
         "dbp": _summary_stats(dbp),
         "pulse_pressure": _summary_stats(pulse_pressure),
@@ -578,8 +591,9 @@ def plot_bp_sd_per_subject(raw: dict[str, dict], out_path: Path) -> None:
 def plot_calibration_offset(raw: dict[str, dict], out_path: Path) -> None:
     """How far each subject's calibration-window BP sits from that same
     subject's own mean BP across all their kept windows -- checks whether
-    the calibration reference (chronologically-first surviving window) is
-    representative or a baseline outlier the Siamese model would need to
+    the calibration reference (the outlier-filtered window closest to the
+    subject's own median SBP/DBP, see bpe/preprocess/patient.py:calibration_index)
+    is representative or a baseline outlier the Siamese model would need to
     correct hard from."""
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     fig.suptitle("Calibration-Window BP Offset from Subject's Own Mean", fontsize=13)

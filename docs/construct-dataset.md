@@ -16,9 +16,10 @@ For every subject in the index it reads the `PLETH` (PPG) and arterial
 pressure (`ABP`/`ART`) channels, resamples to the target rate (a no-op at
 MIMIC-III's native 125 Hz), slices into 8 s windows, labels each window's
 `[SBP, DBP]` from the ABP peaks/troughs, discards windows and patients that
-fail quality control, keeps each patient's first valid window as a
-**calibration pair**, and finally splits patients into train/val/test. See
-[data-cleaning.md](data-cleaning.md) for the precise filter chain.
+fail quality control, keeps each patient's surviving window closest to their
+own median SBP/DBP as a **calibration pair**, and finally splits patients
+into train/val/test. See [data-cleaning.md](data-cleaning.md) for the
+precise filter chain.
 
 ## Usage
 
@@ -52,6 +53,7 @@ continues instead of restarting.
 | `--target-fs`                                                 | 125.0          | Target sample rate in Hz.                                                                                                         |
 | `--window-sec` / `--stride-sec`                               | 8.0 / 4.0      | Window length and stride in seconds.                                                                                              |
 | `--sbp-range` / `--dbp-range`                                 | 75–165 / 40–85 | Physiologically plausible BP bounds (mmHg).                                                                                       |
+| `--pulse-pressure-range`                                      | 20–100         | Plausible pulse-pressure (SBP-DBP) bounds (mmHg), rejecting windows where SBP/DBP each individually pass but their difference doesn't. |
 | `--ppg-periodicity-threshold` / `--abp-periodicity-threshold` | 0.05 / 0.05    | Minimum autocorrelation periodicity score to keep a window.                                                                       |
 | `--min-ppg-std`                                               | 0.005          | Minimum PPG window std, to reject flatline/disconnected-sensor windows.                                                           |
 | `--min-valid-windows`                                         | 375            | Minimum surviving windows to keep a subject.                                                                                      |
@@ -72,7 +74,7 @@ written by `write_patient_npz`. It packs five arrays:
 | --------- | ----------- | ------- | ------------------------------------------------------------ |
 | `x`       | `(N, 1000)` | float32 | N PPG windows, 1000 samples each (8 s × 125 Hz).             |
 | `y`       | `(N, 2)`    | float32 | `[SBP, DBP]` label (mmHg) for each window.                   |
-| `calib_x` | `(1000,)`   | float32 | The patient's calibration window (their first valid window). |
+| `calib_x` | `(1000,)`   | float32 | The patient's calibration window (their surviving window closest to their own median SBP/DBP). |
 | `calib_y` | `(2,)`      | float32 | `[SBP, DBP]` of the calibration window.                      |
 | `fs`      | scalar      | float32 | Sample rate (Hz).                                            |
 

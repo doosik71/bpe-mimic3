@@ -242,3 +242,20 @@ class CalibrationPairDataset(_WindowDatasetBase):
         calib_x = self._calib_x(arrays)
         calib_y = torch.from_numpy(arrays.calib_y)
         return x, y, calib_x, calib_y
+
+
+def subject_balanced_weights(dataset: _WindowDatasetBase) -> torch.Tensor:
+    """Per-window sampling weight, inversely proportional to how many
+    windows that window's subject contributes.
+
+    Windows per subject are highly skewed (dataset-statistic.md found counts
+    ranging from the `min_valid_windows` floor of 375 up to over a million),
+    so uniform per-window sampling lets a handful of long-stay subjects
+    dominate every training batch. Weighting each window by `1 / n_subject`
+    gives every subject the same expected total weight per epoch regardless
+    of how many windows they have -- pass the result to
+    `torch.utils.data.WeightedRandomSampler`.
+    """
+    subject_n_windows = {subject_id: arrays.x.shape[0] for subject_id, arrays in dataset.subjects.items()}
+    weights = [1.0 / subject_n_windows[subject_id] for subject_id, _ in dataset.index]
+    return torch.as_tensor(weights, dtype=torch.double)

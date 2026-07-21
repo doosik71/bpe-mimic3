@@ -8,6 +8,17 @@ not-yet-built tool) throughout [README.md](../README.md),
 user guide, and the results of the first full run against the real dataset
 (2026-07-21).
 
+> **Status note**: §4/§5 below reflect the 2026-07-21 run's QC pipeline and
+> metric code as they existed *at that time*. Since then, all four items
+> §5 flagged (#2-#5) have been acted on: the `overall_yield_pct` overlap
+> bug is fixed (§2.6), a `pulse_pressure_range` QC filter was added, the
+> calibration-window selection now targets the patient's median BP instead
+> of the chronologically-first window, and `train-model` now uses a
+> subject-balanced sampler by default. The window/subject counts, BP
+> distributions, and calibration-offset figures throughout §4 predate all
+> four changes and should be treated as historical until `dataset-statistic`
+> is re-run against a dataset rebuilt with `construct-dataset --force`.
+
 ## 1. Purpose
 
 Give a single, repeatable report over everything the preprocessing pipeline
@@ -113,7 +124,15 @@ Three items from [dataset-analysis.md](dataset-analysis.md) are deliberately
   check, better suited to `bin/dataset-browser`'s waveform view than a
   batch statistic.
 
-### 2.6 Known Limitation Found During the Full Run
+### 2.6 Known Limitation Found During the Full Run (fixed)
+
+**Status: fixed.** `compute_split_summary` (`scripts/dataset-statistic.py`)
+now computes `total_retained_duration_hr` as `window_count * stride_sec`
+instead of `window_count * window_sec`, which is equivalent to dividing the
+old figure by the known 2x overlap factor (`window_sec / stride_sec`). With
+that fix, `overall_yield_pct` and `window_retention_rate_overall` measure the
+same thing in different units and should always agree; the discussion below
+is kept as a record of the bug and how it was found and reasoned about.
 
 Running this tool against the complete dataset (§4 below) surfaced a real
 unit-mismatch bug in one derived metric, `overall_yield_pct`:
@@ -407,32 +426,41 @@ rate already matches the target rate.
 1. **Attrition is milder than assumed.** The README/data-cleaning docs'
    "~90-95% window attrition" expectation (carried over from the source
    paper) does not hold at full scale: observed is 55.2% window-level and
-   17.8% subject-level attrition. Worth updating that framing once this is
-   corroborated, and reason to be somewhat more optimistic about dataset
-   size than originally planned for.
+   17.8% subject-level attrition. **Addressed**: README.md and
+   data-cleaning.md now cite these measured figures instead of the ~90-95%
+   assumption (with a caveat that items #2-#5 below will shift them somewhat
+   once re-measured).
 2. **`overall_yield_pct` is currently miscomputed** (§2.6) -- it compares a
-   ~2x-inflated windowed-duration figure against true elapsed time. Either
-   drop it from `statistic.json`/the printed summary, or fix it (e.g. by
-   dividing `total_retained_duration_hr` by the known overlap factor, or by
-   computing both sides consistently in "windows attempted" units). Flagging
-   here rather than silently patching, since the fix choice affects the
-   metric's exact definition.
+   ~2x-inflated windowed-duration figure against true elapsed time. **Fixed**:
+   `total_retained_duration_hr` is now computed as `window_count * stride_sec`
+   (equivalent to dividing the old figure by the overlap factor), so it's
+   consistent with `window_retention_rate_overall` -- see §2.6.
 3. **Consider a `DBP < SBP` guard.** A small number of windows in every
    split have pulse pressure at or slightly below zero. `physiological_range_ok`
    currently checks each of SBP/DBP against independent bounds but never
-   their relative order; whether this is worth an explicit QC filter
-   depends on how much it affects a trained model (likely negligible given
-   how few windows are affected, but worth a threshold check with
-   `dataset-statistic --skip-ppg-amplitude --no-plots` after any QC change).
+   their relative order. **Addressed**: added `pulse_pressure_ok` /
+   `pulse_pressure_range` (default `[20, 100]` mmHg) as QC step 3.5 in
+   `bpe/preprocess/quality.py`, wired into `process_patient` -- see
+   [data-cleaning.md](data-cleaning.md) §3. Its actual rejection rate at
+   full scale is not yet re-measured (needs a `construct-dataset --force`
+   rebuild + re-run of this tool).
 4. **Windows-per-subject concentration is severe** (up to 40x max/median,
    top 10% of subjects holding ~46% of windows). If per-window random
    sampling is used during training as-is, a handful of subjects will
-   dominate gradient updates; a per-subject-weighted sampler is worth
-   considering if training curves show this causing instability.
+   dominate gradient updates. **Addressed**: `train-model` now defaults to a
+   subject-balanced `WeightedRandomSampler` (`bpe.dataset.subject_balanced_weights`,
+   weight `1/(subject's window count)`), overridable with
+   `--no-subject-balanced-sampling`.
 5. **The calibration reference window is not always representative.**
    Most subjects' calibration BP sits within ~15 mmHg of their own mean, but
    the tails reach ±35 mmHg. Combined with the drift-correlation finding
    (some subjects trend strongly over time), a future iteration could
    explore alternative calibration-window selection (e.g. a window nearer
    the subject's median BP, rather than strictly the first surviving one)
-   as an ablation against the current Siamese model design.
+   as an ablation against the current Siamese model design. **Addressed**:
+   `calibration_index` (`bpe/preprocess/patient.py`) now picks the
+   outlier-filtered window closest to the patient's own median SBP/DBP
+   instead of the chronologically-first window -- see
+   [data-cleaning.md](data-cleaning.md) §4. The calibration-offset
+   distribution in §4.3 above predates this change and should shrink once
+   re-measured.
