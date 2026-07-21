@@ -85,9 +85,13 @@ and where these files land (`data/dataset/{train,val,test}/` after
 | `ppg_periodicity_threshold`, `abp_periodicity_threshold` | 0.05, 0.05                 | **Unvalidated placeholders**, carried over from the 30 s-window paper without being re-tuned for 8 s windows. `periodicity_score` integrates over one lag per sample, so the 1000-sample change shifts its typical magnitude too. |
 | `min_valid_windows`                                      | 375                        | **Estimated**, scaled from the paper's 30 s-window value (100) to 8 s windows by duration. Not yet validated against real yield.                                                                                                  |
 
-The two "unvalidated" rows are exactly what `dataset-statistic` (a planned,
-not-yet-built tool) is meant to help tune, by reporting retention rate as a
-function of threshold.
+The two "unvalidated" rows are exactly what `dataset-statistic` (see
+[scripts/dataset-statistic.py](../scripts/dataset-statistic.py)) is meant to
+help tune, by reporting retention rate and window counts at the currently
+configured thresholds. Note it reports *current* retention, not retention
+*as a function of* threshold (docs/dataset-analysis.md #12) -- that would
+require re-running the per-window QC filters against raw signals under
+alternative threshold values, which the tool doesn't do yet.
 
 ## Case study: flatline PPG passing the periodicity filter
 
