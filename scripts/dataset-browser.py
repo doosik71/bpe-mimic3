@@ -345,7 +345,9 @@ class DatasetBrowserApp(tk.Tk):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
+    parser.add_argument(
+        "--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR, help="Dataset directory to browse (default: %(default)s)"
+    )
     return parser.parse_args()
 
 

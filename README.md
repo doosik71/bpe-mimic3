@@ -176,6 +176,106 @@ uv sync
 > **Do not use `pip install`.** All dependency management must go through
 > `uv`. Run scripts with `uv run python <script>`. See [AGENTS.md](AGENTS.md).
 
+## Quick Start: End-to-End Pipeline
+
+Every step below has a matching launcher in [bin/](bin/) (`bin/<name>` on
+Linux/macOS, `bin\<name>.bat` on Windows) that just forwards to
+`uv run python scripts/<name>.py`; either form works, so the commands below
+use the `uv run` form directly. Pass `--help` to any script for the full
+flag list — only the flags relevant to a first run are shown here.
+
+### 1. Build the MIMIC-III index
+
+Scans `data/mimic3` once for segments that carry both a PPG (`PLETH`) and an
+arterial BP channel, and writes `data/mimic3_index.csv`. Every later step
+reads this index instead of re-scanning the raw dataset.
+
+```bash
+uv run python scripts/build-mimic3-index.py
+```
+
+### 2. Construct the dataset
+
+Reads the index, then resamples/windows/labels/QC-filters every qualifying
+segment and writes `data/dataset/{train,val,test}/{subject_id}.npz` (see
+[docs/data-cleaning.md](docs/data-cleaning.md) for the QC rules). This is
+the slowest step and is **resumable** — progress is tracked in
+`data/dataset/_progress.csv`, so re-running the same command after an
+interruption continues instead of restarting.
+
+```bash
+uv run python scripts/construct-dataset.py
+```
+
+Useful flags while iterating:
+
+- `--limit-subjects N` — process only the first N subjects, for a quick trial run.
+- `--force` — reprocess every subject even if already recorded (needed after changing QC thresholds).
+- `--skip-split` / `--split-only` — rerun only the conversion or only the train/val/test split phase.
+
+### 3. Inspect the data (optional)
+
+`dataset-browser` opens a GUI for browsing PPG/ABP waveforms, spectrograms,
+and PSDs — useful for sanity-checking QC thresholds before committing to a
+full dataset build, and for browsing already-converted (even pre-split) data.
+
+```bash
+uv run python scripts/dataset-browser.py
+```
+
+### 4. Train a model
+
+`--model` selects the architecture from the registry
+([bpe/models/registry.py](bpe/models/registry.py)): `cnn` for the
+calibration-free model, `siamese` for the calibration-based model. Each run
+writes checkpoints and `metrics.csv` to `data/models/<model>/`.
+
+```bash
+uv run python scripts/train-model.py --model cnn
+uv run python scripts/train-model.py --model siamese
+```
+
+Common flags: `--epochs`, `--batch-size`, `--lr`, `--patience` (early
+stopping), `--device auto|cpu|cuda`, `--resume <checkpoint.pt>`.
+
+### 5. Check training progress
+
+Plots per-epoch loss/MAE curves from `metrics.csv` and prints a summary,
+either for one run or every run under `data/models/`:
+
+```bash
+uv run python scripts/generate-train-status.py data/models/cnn
+uv run python scripts/generate-all-train-status.py
+```
+
+### 6. Evaluate a trained model
+
+Runs the model on a dataset split and reports MAE, RMSE, ME, SD, BHS grade,
+and AAMI pass/fail for SBP/DBP, writing `eval_results.json`,
+`eval_plot.png`, and `error_hist.png` next to the checkpoint. Use
+`eval-model` for calibration-free models and `eval-calib-model` for
+calibration-based models (which evaluate using each patient's stored
+calibration pair):
+
+```bash
+uv run python scripts/eval-model.py data/models/cnn
+uv run python scripts/eval-calib-model.py data/models/siamese
+```
+
+Add `--split val` to evaluate on validation instead of test, or
+`--checkpoint <name>.pt` to evaluate a checkpoint other than `best.pt`.
+
+### 7. Collect and summarize results across models
+
+Once several models are trained and evaluated, gather their results into
+`data/results/` for easy comparison/sharing:
+
+```bash
+uv run python scripts/collect-result.py       # copies eval_results.json + plots into data/results/<model>/
+uv run python scripts/summarize-result.py     # writes data/results/summary.csv, one row per model
+uv run python scripts/generate-overview.py    # writes overview_mae.png / overview_rmse.png (params vs. accuracy)
+```
+
 ## Experiment Results
 
 Not available yet — no model has been trained. Once the pipeline in

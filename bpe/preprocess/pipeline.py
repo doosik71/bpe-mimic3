@@ -387,11 +387,16 @@ def convert_dataset(
     pending_ids = [sid for sid in subject_ids if sid not in previous_progress]
     already_done = len(subject_ids) - len(pending_ids)
 
+    print(
+        f"converting {len(pending_ids)} pending subject(s) ({already_done} already done "
+        f"of {len(subject_ids)} indexed) using {workers} worker(s)..."
+    )
+
     progress_bar = None
     if show_progress:
         from tqdm import tqdm
 
-        progress_bar = tqdm(total=len(pending_ids), desc="converting patients", unit="pt")
+        progress_bar = tqdm(total=len(pending_ids), desc="converting patients", unit="pt", ncols=100, ascii=True)
 
     def _process(subject_id: str) -> tuple[Optional[PatientResult], int]:
         return process_patient(
@@ -487,6 +492,8 @@ def finalize_split(
     output_dir = Path(output_dir)
     progress = read_progress(output_dir)
     kept_subjects = [sid for sid, row in progress.items() if row.status == "kept"]
+
+    print(f"splitting {len(kept_subjects)} kept subject(s) into train/val/test under {output_dir}...")
 
     splits = split_subjects(kept_subjects, split=split, seed=seed)
 

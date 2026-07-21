@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from bpe.dataset import DEFAULT_DATASET_DIR, CalibrationFreeDataset
 from bpe.evaluate import calibration_free_predict, run_and_report
 from bpe.models.registry import build_calibration_free_model, list_calibration_free_models
+from bpe.reporting import print_run_info
 
 
 def _resolve_device(name: str) -> torch.device:
@@ -27,11 +28,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("model_dir", type=Path, help="Run directory containing a checkpoint, e.g. data/models/cnn")
     parser.add_argument("--checkpoint", default="best.pt", help="Checkpoint filename inside model_dir (default: %(default)s)")
-    parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
-    parser.add_argument("--split", default="test", choices=("train", "val", "test"))
-    parser.add_argument("--batch-size", type=int, default=512)
-    parser.add_argument("--device", default="auto", help="auto|cpu|cuda|cuda:N")
-    parser.add_argument("--workers", type=int, default=0)
+    parser.add_argument(
+        "--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR, help="Directory holding train/val/test npz files (default: %(default)s)"
+    )
+    parser.add_argument("--split", default="test", choices=("train", "val", "test"), help="Dataset split to evaluate on (default: %(default)s)")
+    parser.add_argument("--batch-size", type=int, default=512, help="Evaluation batch size (default: %(default)s)")
+    parser.add_argument("--device", default="auto", help="auto|cpu|cuda|cuda:N (default: %(default)s)")
+    parser.add_argument("--workers", type=int, default=0, help="DataLoader worker processes (default: %(default)s)")
     parser.add_argument("--no-normalize", action="store_true", help="Skip per-window z-score normalization")
     return parser.parse_args()
 
@@ -47,6 +50,21 @@ def main() -> None:
             f"(available: {list_calibration_free_models()}); use eval-calib-model for calibration-based models"
         )
 
+    print_run_info(
+        "eval-model",
+        {
+            "model dir": args.model_dir,
+            "checkpoint": args.checkpoint,
+            "dataset dir": args.dataset_dir,
+            "split": args.split,
+            "device": device,
+            "batch size": args.batch_size,
+            "workers": args.workers,
+            "normalize": not args.no_normalize,
+        },
+    )
+
+    print(f"loading checkpoint {args.model_dir / args.checkpoint}...")
     checkpoint = torch.load(args.model_dir / args.checkpoint, map_location=device)
     model = build_calibration_free_model(model_name)
     model.load_state_dict(checkpoint["model_state_dict"])

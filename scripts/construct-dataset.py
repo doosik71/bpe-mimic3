@@ -35,12 +35,14 @@ from bpe.preprocess.quality import DEFAULT_DBP_RANGE, DEFAULT_MIN_PPG_STD, DEFAU
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mimic3-dir", type=Path, default=DEFAULT_MIMIC3_DIR)
-    parser.add_argument("--index-csv", type=Path, default=DEFAULT_INDEX_CSV)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_DATASET_DIR)
-    parser.add_argument("--target-fs", type=float, default=DEFAULT_TARGET_FS)
-    parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC)
-    parser.add_argument("--stride-sec", type=float, default=DEFAULT_STRIDE_SEC)
+    parser.add_argument(
+        "--mimic3-dir", type=Path, default=DEFAULT_MIMIC3_DIR, help="Root of the MIMIC-III waveform matched subset (default: %(default)s)"
+    )
+    parser.add_argument("--index-csv", type=Path, default=DEFAULT_INDEX_CSV, help="Index CSV produced by build-mimic3-index (default: %(default)s)")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_DATASET_DIR, help="Output dataset directory (default: %(default)s)")
+    parser.add_argument("--target-fs", type=float, default=DEFAULT_TARGET_FS, help="Target sample rate in Hz (default: %(default)s)")
+    parser.add_argument("--window-sec", type=float, default=DEFAULT_WINDOW_SEC, help="Window length in seconds (default: %(default)s)")
+    parser.add_argument("--stride-sec", type=float, default=DEFAULT_STRIDE_SEC, help="Stride between windows in seconds (default: %(default)s)")
     parser.add_argument(
         "--sbp-range",
         type=float,
@@ -77,9 +79,24 @@ def parse_args() -> argparse.Namespace:
         "windows that periodicity scoring alone can miss (default: %(default)s; "
         "see docs/data-cleaning.md)",
     )
-    parser.add_argument("--min-valid-windows", type=int, default=DEFAULT_MIN_VALID_WINDOWS)
-    parser.add_argument("--max-reject-fraction", type=float, default=DEFAULT_MAX_REJECT_FRACTION)
-    parser.add_argument("--max-bp-deviation", type=float, default=DEFAULT_MAX_BP_DEVIATION)
+    parser.add_argument(
+        "--min-valid-windows",
+        type=int,
+        default=DEFAULT_MIN_VALID_WINDOWS,
+        help="Minimum surviving windows to keep a subject (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--max-reject-fraction",
+        type=float,
+        default=DEFAULT_MAX_REJECT_FRACTION,
+        help="Maximum fraction of a subject's windows that may be rejected before dropping the subject (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--max-bp-deviation",
+        type=float,
+        default=DEFAULT_MAX_BP_DEVIATION,
+        help="Maximum mmHg deviation from a patient's first valid window before a later window is dropped as an outlier (default: %(default)s)",
+    )
     parser.add_argument(
         "--split",
         type=float,
@@ -88,14 +105,14 @@ def parse_args() -> argparse.Namespace:
         metavar=("TRAIN", "VAL", "TEST"),
         help="Patient-level train/val/test ratios, must sum to 1.0 (default: %(default)s)",
     )
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed for the train/val/test split (default: %(default)s)")
     parser.add_argument(
         "--limit-subjects",
         type=int,
         default=None,
-        help="Only process the first N subjects from the index (for quick trials)",
+        help="Only process the first N subjects from the index (for quick trials; default: no limit)",
     )
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=int, default=8, help="Process-pool size for concurrent subject conversion (default: %(default)s)")
     parser.add_argument("--no-progress", action="store_true", help="Disable the tqdm progress bar")
     parser.add_argument("--verbose", action="store_true", help="Log per-subject/segment failures")
     parser.add_argument(

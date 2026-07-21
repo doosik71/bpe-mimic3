@@ -14,14 +14,25 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-from bpe.reporting import DEFAULT_MODELS_DIR, DEFAULT_RESULTS_DIR, count_parameters, list_model_dirs, read_eval_results
+from bpe.reporting import (
+    DEFAULT_MODELS_DIR,
+    DEFAULT_RESULTS_DIR,
+    count_parameters,
+    list_model_dirs,
+    print_run_info,
+    read_eval_results,
+)
 
 _GRADE_COLORS = {"A": "tab:green", "B": "tab:blue", "C": "tab:orange", "D": "tab:red"}
 
 
 def _collect(models_dir: Path) -> list[dict]:
+    from tqdm import tqdm
+
+    model_dirs = list_model_dirs(models_dir)
+    print(f"found {len(model_dirs)} model run(s) under {models_dir}")
     rows = []
-    for model_dir in list_model_dirs(models_dir):
+    for model_dir in tqdm(model_dirs, desc="collecting", unit="model", ncols=100, ascii=True):
         results = read_eval_results(model_dir)
         if results is None:
             continue
@@ -62,13 +73,14 @@ def _scatter(rows: list[dict], metric: str, out_path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR, help="Directory containing per-model training runs (default: %(default)s)")
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_RESULTS_DIR, help="Directory the overview PNGs are written into (default: %(default)s)")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    print_run_info("generate-overview", {"models dir": args.models_dir, "output dir": args.output_dir})
     rows = _collect(args.models_dir)
     if not rows:
         print(f"no evaluated models found under {args.models_dir}")

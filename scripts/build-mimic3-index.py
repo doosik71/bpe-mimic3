@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
         "--limit",
         type=int,
         default=None,
-        help="Only scan the first N records from RECORDS-waveforms (for quick trials)",
+        help="Only scan the first N records from RECORDS-waveforms (for quick trials; default: no limit)",
     )
     parser.add_argument(
         "--workers",

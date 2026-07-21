@@ -21,6 +21,7 @@ from bpe.models.registry import (
     list_calibration_based_models,
     list_calibration_free_models,
 )
+from bpe.reporting import print_run_info
 from bpe.trainer import (
     DEFAULT_EPOCHS,
     DEFAULT_LR,
@@ -51,29 +52,37 @@ def parse_args() -> argparse.Namespace:
     all_models = list_calibration_free_models() + list_calibration_based_models()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=all_models, help="Model name from the registry")
-    parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
-    parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
-    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS)
+    parser.add_argument(
+        "--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR, help="Directory holding train/val/test npz files (default: %(default)s)"
+    )
+    parser.add_argument(
+        "--models-dir", type=Path, default=DEFAULT_MODELS_DIR, help="Directory checkpoints/metrics are written under (default: %(default)s)"
+    )
+    parser.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help="Maximum training epochs (default: %(default)s)")
     parser.add_argument("--batch-size", type=int, default=32, help="Paper default (default: %(default)s)")
-    parser.add_argument("--lr", type=float, default=DEFAULT_LR)
-    parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY)
-    parser.add_argument("--patience", type=int, default=DEFAULT_PATIENCE, help="Early-stopping patience on val loss")
+    parser.add_argument("--lr", type=float, default=DEFAULT_LR, help="Learning rate (default: %(default)s)")
+    parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY, help="Adam weight decay (default: %(default)s)")
+    parser.add_argument(
+        "--patience", type=int, default=DEFAULT_PATIENCE, help="Early-stopping patience on val loss (default: %(default)s)"
+    )
     parser.add_argument(
         "--embedding-dim", type=int, default=None, help="Override the backbone embedding dim (default: model default)"
     )
     parser.add_argument("--dropout", type=float, default=None, help="Override dropout probability (default: model default)")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="auto", help="auto|cpu|cuda|cuda:N")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: %(default)s)")
+    parser.add_argument("--device", default="auto", help="auto|cpu|cuda|cuda:N (default: %(default)s)")
     parser.add_argument(
         "--workers",
         type=int,
         default=0,
-        help="DataLoader worker processes. Default 0: the dataset is already fully "
+        help="DataLoader worker processes (default: %(default)s). Default 0: the dataset is already fully "
         "in-memory numpy arrays, so extra worker processes mostly just duplicate that "
         "memory (Windows uses spawn) for little benefit.",
     )
     parser.add_argument("--no-normalize", action="store_true", help="Skip per-window z-score normalization")
-    parser.add_argument("--resume", type=Path, default=None, help="Path to a checkpoint .pt to resume from")
+    parser.add_argument(
+        "--resume", type=Path, default=None, help="Path to a checkpoint .pt to resume from (default: start a fresh run)"
+    )
     return parser.parse_args()
 
 
@@ -82,6 +91,26 @@ def main() -> None:
     _set_seed(args.seed)
     device = _resolve_device(args.device)
     normalize = not args.no_normalize
+    out_dir = args.models_dir / args.model
+
+    print_run_info(
+        "train-model",
+        {
+            "model": args.model,
+            "dataset dir": args.dataset_dir,
+            "output dir": out_dir,
+            "device": device,
+            "epochs": args.epochs,
+            "batch size": args.batch_size,
+            "lr": args.lr,
+            "weight decay": args.weight_decay,
+            "patience": args.patience,
+            "seed": args.seed,
+            "normalize": normalize,
+            "workers": args.workers,
+            "resume": args.resume if args.resume is not None else "(none, fresh run)",
+        },
+    )
 
     model_kwargs = {}
     if args.embedding_dim is not None:
@@ -105,7 +134,6 @@ def main() -> None:
     )
     val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=args.workers)
 
-    out_dir = args.models_dir / args.model
     history = train(
         model,
         step_fn,

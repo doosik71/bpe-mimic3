@@ -65,13 +65,16 @@ def _run_epoch(
     step_fn: StepFn,
     device: torch.device,
     optimizer: Optional[torch.optim.Optimizer],
+    desc: str = "",
 ) -> tuple[float, float, float]:
+    from tqdm import tqdm
+
     training = optimizer is not None
     model.train(training)
     total_loss = 0.0
     total_abs_err = torch.zeros(2)
     n_samples = 0
-    for batch in loader:
+    for batch in tqdm(loader, desc=desc, unit="batch", ncols=100, ascii=True, leave=False):
         if training:
             optimizer.zero_grad()
         with torch.set_grad_enabled(training):
@@ -125,6 +128,11 @@ def train(
         start_epoch = checkpoint["epoch"] + 1
         best_val_loss = checkpoint.get("best_val_loss", float("inf"))
 
+    print(
+        f"training on {device} for epoch(s) {start_epoch}-{epochs} "
+        f"({len(train_loader)} train batch(es), {len(val_loader)} val batch(es) per epoch)..."
+    )
+
     with metrics_path.open("a" if resume is not None else "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if resume is None:
@@ -135,8 +143,12 @@ def train(
 
         for epoch in range(start_epoch, epochs + 1):
             t0 = time.time()
-            train_loss, train_sbp_mae, train_dbp_mae = _run_epoch(model, train_loader, step_fn, device, optimizer)
-            val_loss, val_sbp_mae, val_dbp_mae = _run_epoch(model, val_loader, step_fn, device, None)
+            train_loss, train_sbp_mae, train_dbp_mae = _run_epoch(
+                model, train_loader, step_fn, device, optimizer, desc=f"epoch {epoch}/{epochs} train"
+            )
+            val_loss, val_sbp_mae, val_dbp_mae = _run_epoch(
+                model, val_loader, step_fn, device, None, desc=f"epoch {epoch}/{epochs} val"
+            )
             elapsed = time.time() - t0
 
             metrics = EpochMetrics(epoch, train_loss, val_loss, train_sbp_mae, train_dbp_mae, val_sbp_mae, val_dbp_mae)

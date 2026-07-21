@@ -46,9 +46,12 @@ def siamese_predict(model: nn.Module, batch, device: torch.device):
 def collect_predictions(
     model: nn.Module, loader: DataLoader, predict_fn: PredictFn, device: torch.device
 ) -> tuple[np.ndarray, np.ndarray]:
+    from tqdm import tqdm
+
     model.eval()
     preds, trues = [], []
-    for batch in loader:
+    print(f"running inference over {len(loader)} batch(es)...")
+    for batch in tqdm(loader, desc="evaluating", unit="batch", ncols=100, ascii=True):
         pred, true = predict_fn(model, batch, device)
         preds.append(pred.numpy())
         trues.append(true.numpy())

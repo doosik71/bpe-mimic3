@@ -185,11 +185,13 @@ def build_index(
     if limit is not None:
         record_list = record_list[:limit]
 
+    print(f"scanning {len(record_list)} record(s) under {mimic3_dir} for PLETH+BP segments ({workers} worker(s))...")
+
     progress = None
     if show_progress:
         from tqdm import tqdm
 
-        progress = tqdm(total=len(record_list), desc="scanning records", unit="rec")
+        progress = tqdm(total=len(record_list), desc="scanning records", unit="rec", ncols=100, ascii=True)
 
     all_segments: list[SegmentInfo] = []
     errors: list[tuple[str, str]] = []

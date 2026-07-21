@@ -30,9 +30,13 @@ def load_split(dataset_dir: Path, split: str) -> dict[str, SubjectArrays]:
     """Eagerly load every subject npz in one split into memory. Dataset
     sizes here (a few hundred subjects x a few hundred windows) are small
     enough that this is simpler and fast enough than lazy per-window I/O."""
+    from tqdm import tqdm
+
     split_dir = Path(dataset_dir) / split
+    paths = sorted(split_dir.glob("*.npz"))
+    print(f"loading {len(paths)} subject(s) from {split_dir}...")
     subjects: dict[str, SubjectArrays] = {}
-    for path in sorted(split_dir.glob("*.npz")):
+    for path in tqdm(paths, desc=f"loading {split}", unit="subj", ncols=100, ascii=True):
         with np.load(path) as data:
             subjects[path.stem] = SubjectArrays(
                 x=data["x"],

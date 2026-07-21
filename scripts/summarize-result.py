@@ -11,7 +11,7 @@ import argparse
 import csv
 from pathlib import Path
 
-from bpe.reporting import DEFAULT_MODELS_DIR, DEFAULT_RESULTS_DIR, list_model_dirs, read_eval_results
+from bpe.reporting import DEFAULT_MODELS_DIR, DEFAULT_RESULTS_DIR, list_model_dirs, print_run_info, read_eval_results
 
 
 def _flatten(model_name: str, results: dict) -> dict:
@@ -24,18 +24,23 @@ def _flatten(model_name: str, results: dict) -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
-    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
+    parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR, help="Directory containing per-model training runs (default: %(default)s)")
+    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR, help="Directory summary.csv is written into (default: %(default)s)")
     return parser.parse_args()
 
 
 def main() -> None:
+    from tqdm import tqdm
+
     args = parse_args()
+    print_run_info("summarize-result", {"models dir": args.models_dir, "results dir": args.results_dir})
+
     model_dirs = list_model_dirs(args.models_dir)
+    print(f"found {len(model_dirs)} model run(s) under {args.models_dir}")
 
     rows = []
     skipped = []
-    for model_dir in model_dirs:
+    for model_dir in tqdm(model_dirs, desc="summarizing", unit="model", ncols=100, ascii=True):
         results = read_eval_results(model_dir)
         if results is None:
             skipped.append(model_dir.name)

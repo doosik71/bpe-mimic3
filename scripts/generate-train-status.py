@@ -7,7 +7,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bpe.reporting import plot_train_status, print_train_status_summary, read_metrics_csv, summarize_train_status
+from bpe.reporting import (
+    plot_train_status,
+    print_run_info,
+    print_train_status_summary,
+    read_metrics_csv,
+    summarize_train_status,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,6 +25,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    print_run_info("generate-train-status", {"model dir": args.model_dir, "save plots": not args.no_save})
     rows = read_metrics_csv(args.model_dir)
     summary = summarize_train_status(args.model_dir, rows)
     if summary is None:

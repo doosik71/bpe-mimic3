@@ -23,6 +23,16 @@ DEFAULT_MODELS_DIR = Path("data/models")
 DEFAULT_RESULTS_DIR = Path("data/results")
 
 
+def print_run_info(title: str, fields: dict) -> None:
+    """Print a short aligned key/value block describing what a script is
+    about to do (inputs, outputs, device, ...), so a long-running run
+    doesn't start out silent."""
+    print(f"=== {title} ===")
+    width = max(len(key) for key in fields)
+    for key, value in fields.items():
+        print(f"{key:<{width}} : {value}")
+
+
 def list_model_dirs(models_dir: Path) -> list[Path]:
     """Every immediate subdirectory of `models_dir` -- each is one model's
     training run."""
