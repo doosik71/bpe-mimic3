@@ -6,7 +6,7 @@ Database Matched Subset**. It reproduces the calibration-free and
 calibration-based (Siamese network) CNN techniques from Schlesinger,
 Vigderhouse, Eytan & Moshe (2020), *"Blood Pressure Estimation From PPG
 Signals Using Convolutional Neural Networks And Siamese Network"* — see
-[docs/method.md](docs/method.md) for the full methodology summary this
+[docs/method-spectrogram-cnn.md](docs/method-spectrogram-cnn.md) for the full methodology summary this
 project is built from, and [docs/development-plan.md](docs/development-plan.md)
 for the concrete implementation plan and current status.
 
@@ -32,10 +32,10 @@ PPG waveform (125 Hz, 8 s)  ──►  [ Siamese CNN vs. calib. PPG/BP ]  ──
 This differs from the source paper (and from an earlier, related project
 that used VitalDB) in two deliberate ways:
 
-| Aspect         | Source paper (method.md) | This project                                                                                                                                         |
-| -------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Segment length | 30 s                     | **8 s** — 30 s is too long for a real-time BP estimate; artifact-filter thresholds are re-derived for the shorter window (see the development plan). |
-| Dataset        | MIMIC-II, 125 Hz         | **MIMIC-III Waveform Database Matched Subset**, processed in full at its native 125 Hz (no resampling needed).                                       |
+| Aspect         | Source paper (method-spectrogram-cnn.md) | This project                                                                                                                                         |
+| -------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Segment length | 30 s                                     | **8 s** — 30 s is too long for a real-time BP estimate; artifact-filter thresholds are re-derived for the shorter window (see the development plan). |
+| Dataset        | MIMIC-II, 125 Hz                         | **MIMIC-III Waveform Database Matched Subset**, processed in full at its native 125 Hz (no resampling needed).                                       |
 
 Sample rate is unchanged from the source paper: 125 Hz, MIMIC's native
 waveform rate, used as-is.
@@ -67,7 +67,7 @@ see [docs/development-plan.md](docs/development-plan.md) §2 and §4.
 
 ## Methodology Summary
 
-Full detail in [docs/method.md](docs/method.md); summarized here as it
+Full detail in [docs/method-spectrogram-cnn.md](docs/method-spectrogram-cnn.md); summarized here as it
 applies to this project.
 
 ### Preprocessing
@@ -146,7 +146,7 @@ bpe-mimic3/
 │   ├── trainer.py
 │   └── metrics.py                     # MAE/RMSE/ME/SD, BHS grade, AAMI pass/fail
 ├── docs/
-│   ├── method.md                      # source methodology
+│   ├── method-spectrogram-cnn.md                      # source methodology
 │   ├── development-plan.md            # implementation plan & status
 │   ├── data-cleaning.md               # implementation-level QC pipeline detail
 │   └── evaluation-result*.md          # written once models are evaluated
@@ -226,13 +226,15 @@ uv run python scripts/dataset-browser.py
 ### 4. Train a model
 
 `--model` selects the architecture from the registry
-([bpe/models/registry.py](bpe/models/registry.py)): `cnn` for the
-calibration-free model, `siamese` for the calibration-based model. Each run
-writes checkpoints and `metrics.csv` to `data/models/<model>/`.
+([bpe/models/registry.py](bpe/models/registry.py)): `spectro_cnn` for the
+calibration-free model, `spectro_siamese` for the calibration-based model
+(both use spectrogram features -- see [docs/COMMANDS.md](docs/COMMANDS.md)
+for the full list of every registered architecture). Each run writes
+checkpoints and `metrics.csv` to `data/models/<model>/`.
 
 ```bash
-uv run python scripts/train-model.py --model cnn
-uv run python scripts/train-model.py --model siamese
+uv run python scripts/train-model.py --model spectro_cnn
+uv run python scripts/train-model.py --model spectro_siamese
 ```
 
 Common flags: `--epochs`, `--batch-size`, `--lr`, `--patience` (early
@@ -244,7 +246,7 @@ Plots per-epoch loss/MAE curves from `metrics.csv` and prints a summary,
 either for one run or every run under `data/models/`:
 
 ```bash
-uv run python scripts/generate-train-status.py data/models/cnn
+uv run python scripts/generate-train-status.py data/models/spectro_cnn
 uv run python scripts/generate-all-train-status.py
 ```
 
@@ -258,8 +260,8 @@ calibration-based models (which evaluate using each patient's stored
 calibration pair):
 
 ```bash
-uv run python scripts/eval-model.py data/models/cnn
-uv run python scripts/eval-calib-model.py data/models/siamese
+uv run python scripts/eval-model.py data/models/spectro_cnn
+uv run python scripts/eval-calib-model.py data/models/spectro_siamese
 ```
 
 Add `--split val` to evaluate on validation instead of test, or

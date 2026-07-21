@@ -3,7 +3,7 @@
 This document describes, precisely, what `bpe/preprocess/` actually does to
 turn raw MIMIC-III waveform segments into the windows stored in
 `data/dataset/`. It is the implementation-level companion to
-[method.md](method.md) (the source methodology) and
+[method-spectrogram-cnn.md](method-spectrogram-cnn.md) (the source methodology) and
 [development-plan.md](development-plan.md) §4 (the design rationale); this
 document tracks the code as built, including gaps discovered after the fact.
 
@@ -40,7 +40,7 @@ toward `n_valid`) the moment it fails any check:
 | 3.1 | No NaN in either channel          | inline (`np.isnan(...).any()`)            | WFDB encodes sensor gaps/invalid samples as NaN.                                                                              |
 | 3.2 | PPG has enough amplitude          | `has_sufficient_amplitude` (`quality.py`) | See "Flatline PPG" below — a disconnected/malfunctioning sensor can output a near-constant reading.                           |
 | 3.3 | SBP/DBP can be labeled            | `compute_sbp_dbp` (`labels.py`)           | Peak/trough detection on the ABP window; returns `None` (drop) if fewer than 3 systolic peaks or diastolic troughs are found. |
-| 3.4 | SBP/DBP physiologically plausible | `physiological_range_ok` (`quality.py`)   | SBP ∈ `[75, 165]` mmHg, DBP ∈ `[40, 85]` mmHg (docs/method.md's bounds, unchanged by window length).                          |
+| 3.4 | SBP/DBP physiologically plausible | `physiological_range_ok` (`quality.py`)   | SBP ∈ `[75, 165]` mmHg, DBP ∈ `[40, 85]` mmHg (docs/method-spectrogram-cnn.md's bounds, unchanged by window length).          |
 | 3.5 | PPG is periodic                   | `is_periodic` (`quality.py`)              | Autocorrelation-based; a real pulse signal stays correlated across many lags, noise decays quickly.                           |
 | 3.6 | ABP is periodic                   | `is_periodic` (`quality.py`)              | Same check, applied to the arterial pressure window.                                                                          |
 
@@ -79,8 +79,8 @@ and where these files land (`data/dataset/{train,val,test}/` after
 
 | Parameter                                                | Default                    | Status                                                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sbp_range`, `dbp_range`                                 | `[75,165]`, `[40,85]` mmHg | From method.md, not window-length-dependent.                                                                                                                                                                                      |
-| `max_bp_deviation`                                       | 40 mmHg                    | From method.md, not window-length-dependent.                                                                                                                                                                                      |
+| `sbp_range`, `dbp_range`                                 | `[75,165]`, `[40,85]` mmHg | From method-spectrogram-cnn.md, not window-length-dependent.                                                                                                                                                                      |
+| `max_bp_deviation`                                       | 40 mmHg                    | From method-spectrogram-cnn.md, not window-length-dependent.                                                                                                                                                                      |
 | `min_ppg_std`                                            | 0.005                      | **Empirically derived** (see case study below) from the observed bimodal std distribution across the first ~100 converted subjects. Worth re-checking at full-dataset scale.                                                      |
 | `ppg_periodicity_threshold`, `abp_periodicity_threshold` | 0.05, 0.05                 | **Unvalidated placeholders**, carried over from the 30 s-window paper without being re-tuned for 8 s windows. `periodicity_score` integrates over one lag per sample, so the 1000-sample change shifts its typical magnitude too. |
 | `min_valid_windows`                                      | 375                        | **Estimated**, scaled from the paper's 30 s-window value (100) to 8 s windows by duration. Not yet validated against real yield.                                                                                                  |

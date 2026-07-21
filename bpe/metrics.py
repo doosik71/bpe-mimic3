@@ -1,6 +1,6 @@
 """Clinical accuracy metrics for BP estimation: basic error statistics,
 BHS cumulative-error grading, and AAMI pass/fail -- the same standards
-docs/method.md benchmarks its own MAD/STD results against.
+docs/method-spectrogram-cnn.md benchmarks its own MAD/STD results against.
 """
 
 from __future__ import annotations
@@ -42,7 +42,8 @@ def compute_error_stats(pred: np.ndarray, true: np.ndarray) -> ErrorStats:
 
 def bhs_cumulative_percentages(pred: np.ndarray, true: np.ndarray) -> tuple[float, float, float]:
     """Return `(% within 5 mmHg, % within 10 mmHg, % within 15 mmHg)`."""
-    abs_error = np.abs(np.asarray(pred, dtype=float) - np.asarray(true, dtype=float))
+    abs_error = np.abs(np.asarray(pred, dtype=float) -
+                       np.asarray(true, dtype=float))
     if len(abs_error) == 0:
         return 0.0, 0.0, 0.0
     return (

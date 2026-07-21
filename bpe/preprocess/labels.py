@@ -1,6 +1,6 @@
 """Per-window SBP/DBP labeling from an arterial BP window.
 
-Follows docs/method.md: SBP/DBP are the mean of the window's systolic
+Follows docs/method-spectrogram-cnn.md: SBP/DBP are the mean of the window's systolic
 peaks / diastolic troughs, not a single instantaneous reading.
 """
 

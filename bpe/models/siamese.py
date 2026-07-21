@@ -1,4 +1,4 @@
-"""Siamese calibration-based BP estimator (docs/method.md §3,
+"""Siamese calibration-based BP estimator (docs/method-spectrogram-cnn.md §3,
 docs/development-plan.md §5.2): two weight-sharing passes of the same
 backbone process the current PPG window and the patient's calibration
 window; their feature vectors are subtracted (signed, not an
@@ -20,7 +20,7 @@ from bpe.models.backbone import (
 from bpe.preprocess.pipeline import DEFAULT_TARGET_FS
 
 
-class SiameseCalibrationModel(nn.Module):
+class SpectroSiamese(nn.Module):
     def __init__(
         self,
         fs: float = DEFAULT_TARGET_FS,
@@ -31,7 +31,8 @@ class SiameseCalibrationModel(nn.Module):
         super().__init__()
         # A single backbone instance is called on both inputs below, so the
         # two "twin" branches share weights by construction.
-        self.backbone = PPGFeatureBackbone(fs, input_samples, embedding_dim, dropout)
+        self.backbone = PPGFeatureBackbone(
+            fs, input_samples, embedding_dim, dropout)
         self.relu = nn.ReLU(inplace=True)
         self.head = nn.Linear(embedding_dim, 2)  # -> [delta_SBP, delta_DBP]
 

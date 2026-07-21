@@ -20,7 +20,8 @@ from torch.utils.data import DataLoader
 # pred_bp/true_bp are always in absolute [SBP, DBP] mmHg, even if the model
 # itself regresses on a delta scale (see siamese_step) -- this keeps the MAE
 # reported here comparable across both model families.
-StepFn = Callable[[nn.Module, tuple, torch.device], tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
+StepFn = Callable[[nn.Module, tuple, torch.device],
+                  tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
 
 DEFAULT_EPOCHS = 100
 DEFAULT_LR = 1e-3
@@ -33,14 +34,21 @@ _L1 = nn.L1Loss()
 def calibration_free_step(model: nn.Module, batch, device: torch.device):
     x, y = batch
     x, y = x.to(device), y.to(device)
-    pred = model(x)
-    loss = _L1(pred, y)
+    if hasattr(model, "compute_loss"):
+        # Multi-task models (e.g. MTAE, MTAE_MLP, AE_LSTM) define this to mix
+        # in a reconstruction loss alongside the BP regression loss -- see
+        # bpe/models/mtae.py for the convention.
+        loss, pred = model.compute_loss(x, y, _L1)
+    else:
+        pred = model(x)
+        loss = _L1(pred, y)
     return loss, pred, y
 
 
 def siamese_step(model: nn.Module, batch, device: torch.device):
     x, y, calib_x, calib_y = batch
-    x, y, calib_x, calib_y = x.to(device), y.to(device), calib_x.to(device), calib_y.to(device)
+    x, y, calib_x, calib_y = x.to(device), y.to(
+        device), calib_x.to(device), calib_y.to(device)
     delta_pred = model(x, calib_x)
     delta_true = y - calib_y
     loss = _L1(delta_pred, delta_true)
@@ -84,7 +92,8 @@ def _run_epoch(
             optimizer.step()
         batch_size = true_bp.shape[0]
         total_loss += float(loss.detach()) * batch_size
-        total_abs_err += (pred_bp.detach() - true_bp.detach()).abs().sum(dim=0).cpu()
+        total_abs_err += (pred_bp.detach() - true_bp.detach()
+                          ).abs().sum(dim=0).cpu()
         n_samples += batch_size
     mean_loss = total_loss / max(1, n_samples)
     sbp_mae = float(total_abs_err[0] / max(1, n_samples))
@@ -105,12 +114,14 @@ def train(
     device: Optional[torch.device] = None,
     resume: Optional[Path] = None,
 ) -> list[EpochMetrics]:
-    """Train `model` with Adam + L1 loss (docs/method.md §2/§3), early
+    """Train `model` with Adam + L1 loss (docs/method-spectrogram-cnn.md §2/§3), early
     stopping on validation loss, and per-epoch checkpoints under `out_dir`.
     Returns the per-epoch metrics history."""
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or torch.device(
+        "cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=lr, weight_decay=weight_decay)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +148,8 @@ def train(
         writer = csv.writer(f)
         if resume is None:
             writer.writerow(
-                ["epoch", "train_loss", "val_loss", "train_sbp_mae", "train_dbp_mae", "val_sbp_mae", "val_dbp_mae"]
+                ["epoch", "train_loss", "val_loss", "train_sbp_mae",
+                    "train_dbp_mae", "val_sbp_mae", "val_dbp_mae"]
             )
             f.flush()
 
@@ -151,9 +163,11 @@ def train(
             )
             elapsed = time.time() - t0
 
-            metrics = EpochMetrics(epoch, train_loss, val_loss, train_sbp_mae, train_dbp_mae, val_sbp_mae, val_dbp_mae)
+            metrics = EpochMetrics(
+                epoch, train_loss, val_loss, train_sbp_mae, train_dbp_mae, val_sbp_mae, val_dbp_mae)
             history.append(metrics)
-            writer.writerow([epoch, train_loss, val_loss, train_sbp_mae, train_dbp_mae, val_sbp_mae, val_dbp_mae])
+            writer.writerow([epoch, train_loss, val_loss, train_sbp_mae,
+                            train_dbp_mae, val_sbp_mae, val_dbp_mae])
             f.flush()
 
             print(
@@ -177,7 +191,8 @@ def train(
             else:
                 epochs_without_improvement += 1
                 if epochs_without_improvement >= patience:
-                    print(f"early stopping at epoch {epoch} (no improvement for {patience} epochs)")
+                    print(
+                        f"early stopping at epoch {epoch} (no improvement for {patience} epochs)")
                     break
 
     return history

@@ -1,4 +1,4 @@
-"""Shared AlexNet-inspired feature-extraction backbone (docs/method.md §2,
+"""Shared AlexNet-inspired feature-extraction backbone (docs/method-spectrogram-cnn.md §2,
 docs/development-plan.md §5.1): 5 conv layers + the first 2 of 3 FC layers,
 producing an embedding vector. Both the calibration-free CNN and the
 Siamese calibration-based model build on this same backbone -- the
@@ -24,7 +24,8 @@ DEFAULT_DROPOUT = 0.5
 class _ConvBnReLU(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int, padding: int):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding)
+        self.conv = nn.Conv2d(in_channels, out_channels,
+                              kernel_size=kernel_size, padding=padding)
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
@@ -36,14 +37,14 @@ class PPGFeatureBackbone(nn.Module):
     """Spectrogram -> embedding vector.
 
     Conv stack: conv1 -> pool, conv2 -> pool, conv3 -> conv4 (directly
-    connected, no pooling between), conv5 -> pool -- matching method.md's
+    connected, no pooling between), conv5 -> pool -- matching method-spectrogram-cnn.md's
     "max pooling after the 1st/2nd/5th conv layer, 3rd and 4th directly
     connected" description. Batch norm after every conv, ReLU throughout.
     FC1/FC2 each preceded by dropout, matching AlexNet's placement (dropout
     before fc6/fc7, not before the final output layer).
 
     Channel counts, kernel sizes, and `embedding_dim` are not specified by
-    method.md (only the AlexNet-inspired *structure* is) -- these are this
+    method-spectrogram-cnn.md (only the AlexNet-inspired *structure* is) -- these are this
     project's own choice, sized down from AlexNet's original 224x224-image
     hyperparameters to fit the much smaller spectrogram input.
     """
@@ -69,8 +70,10 @@ class PPGFeatureBackbone(nn.Module):
 
         flatten_dim = self._infer_flatten_dim(input_samples)
 
-        self.fc1 = nn.Sequential(nn.Dropout(dropout), nn.Linear(flatten_dim, 512), nn.ReLU(inplace=True))
-        self.fc2 = nn.Sequential(nn.Dropout(dropout), nn.Linear(512, embedding_dim), nn.ReLU(inplace=True))
+        self.fc1 = nn.Sequential(nn.Dropout(dropout), nn.Linear(
+            flatten_dim, 512), nn.ReLU(inplace=True))
+        self.fc2 = nn.Sequential(nn.Dropout(dropout), nn.Linear(
+            512, embedding_dim), nn.ReLU(inplace=True))
         self.embedding_dim = embedding_dim
 
     def _conv_stack(self, spec: torch.Tensor) -> torch.Tensor:

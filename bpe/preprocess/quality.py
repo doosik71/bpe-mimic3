@@ -1,4 +1,4 @@
-"""Window-level validity checks from docs/method.md: physiological
+"""Window-level validity checks from docs/method-spectrogram-cnn.md: physiological
 plausibility of the labeled BP, and periodicity (noise) of the raw signal.
 """
 
@@ -40,7 +40,7 @@ def normalized_autocorrelation(x: np.ndarray) -> np.ndarray:
     x = np.asarray(x, dtype=float)
     x = x - x.mean()
     full = np.correlate(x, x, mode="full")
-    ac = full[len(x) - 1 :]
+    ac = full[len(x) - 1:]
     if ac[0] == 0:
         return np.zeros_like(ac)
     return ac / ac[0]

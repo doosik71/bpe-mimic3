@@ -1,4 +1,4 @@
-"""Calibration-free BP estimator (docs/method.md §2, docs/development-plan.md
+"""Calibration-free BP estimator (docs/method-spectrogram-cnn.md §2, docs/development-plan.md
 §5.1): predicts SBP/DBP directly from a single PPG window's spectrogram, no
 patient-specific reference reading required.
 """
@@ -17,7 +17,7 @@ from bpe.models.backbone import (
 from bpe.preprocess.pipeline import DEFAULT_TARGET_FS
 
 
-class CalibrationFreeCNN(nn.Module):
+class SpectroCNN(nn.Module):
     def __init__(
         self,
         fs: float = DEFAULT_TARGET_FS,
@@ -26,8 +26,10 @@ class CalibrationFreeCNN(nn.Module):
         dropout: float = DEFAULT_DROPOUT,
     ):
         super().__init__()
-        self.backbone = PPGFeatureBackbone(fs, input_samples, embedding_dim, dropout)
-        self.head = nn.Linear(embedding_dim, 2)  # linear regression -> [SBP, DBP]
+        self.backbone = PPGFeatureBackbone(
+            fs, input_samples, embedding_dim, dropout)
+        # linear regression -> [SBP, DBP]
+        self.head = nn.Linear(embedding_dim, 2)
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
         """`waveform`: `(batch, samples)` -> `(batch, 2)` `[SBP, DBP]` mmHg."""

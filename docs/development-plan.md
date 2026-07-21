@@ -1,7 +1,7 @@
 # Development Plan — BP Estimation from PPG using MIMIC-III
 
 This document defines the implementation plan for `bpe-mimic3`. It translates
-the methodology in [method.md](method.md) (Schlesinger et al., 2020) into a
+the methodology in [method-spectrogram-cnn.md](method-spectrogram-cnn.md) (Schlesinger et al., 2020) into a
 concrete pipeline built on the **MIMIC-III Waveform Database Matched Subset**
 available locally at `data/mimic3`.
 
@@ -10,18 +10,18 @@ available locally at `data/mimic3`.
 These were confirmed with the project owner and are treated as fixed
 constraints for the rest of this plan:
 
-| Topic                    | Decision                                                                                                                                                                                                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Calibration-based model  | Reproduce the **Siamese network** from method.md as-is (twin CNN feature extractors, feature-vector subtraction, ΔBP regression head). No bias-correction/OSU alternative for now.                                             |
-| Calibration-free model   | Implement **one** CNN first — the AlexNet-inspired architecture from method.md. The model layer is designed as a registry from the start so more architectures can be added later without breaking the training/eval pipeline. |
-| Segment length           | **8 s**, not the paper's 30 s. Rationale: 30 s is too long for a real-time BP estimate. This changes downstream STFT sub-window sizing and the artifact-filter thresholds (see §4).                                            |
-| Target sample rate       | **125 Hz** — MIMIC-III's native waveform rate, used as-is.                                                                                                                                                                     |
-| Dataset scope            | Process the **entire** `mimic3wdb-matched/1.0` subset from the start (not a capped pilot). Expect roughly 10 % of raw segments to survive QC, similar in spirit to the ~5 % retention reported in method.md.                   |
-| Data flow                | `data/mimic3` (read-only) → cleaning/labeling pipeline → `data/dataset` (PyTorch-ready). All training/evaluation code reads only from `data/dataset`; nothing ever writes to `data/mimic3`.                                    |
-| Repository shape         | Build the full script/CLI structure up front, at parity with the previous `bpe-vitaldb` project (see §3), rather than growing it incrementally.                                                                                |
-| Calibration-window reuse | A patient's calibration window is also used as a normal training sample for the calibration-free model (no held-out anchor point).                                                                                             |
-| Spectrogram sub-window   | Fixed at **1 s** (Hamming window, 95 % overlap) for the 8 s segment, not derived proportionally from the paper's 6 s/30 s ratio.                                                                                               |
-| Multi-segment records    | Processed **segment-by-segment only** — windows never span a segment boundary, since segments can have different active signal sets and inter-segment gaps aren't guaranteed to be zero.                                       |
+| Topic                    | Decision                                                                                                                                                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Calibration-based model  | Reproduce the **Siamese network** from method-spectrogram-cnn.md as-is (twin CNN feature extractors, feature-vector subtraction, ΔBP regression head). No bias-correction/OSU alternative for now.                                             |
+| Calibration-free model   | Implement **one** CNN first — the AlexNet-inspired architecture from method-spectrogram-cnn.md. The model layer is designed as a registry from the start so more architectures can be added later without breaking the training/eval pipeline. |
+| Segment length           | **8 s**, not the paper's 30 s. Rationale: 30 s is too long for a real-time BP estimate. This changes downstream STFT sub-window sizing and the artifact-filter thresholds (see §4).                                                            |
+| Target sample rate       | **125 Hz** — MIMIC-III's native waveform rate, used as-is.                                                                                                                                                                                     |
+| Dataset scope            | Process the **entire** `mimic3wdb-matched/1.0` subset from the start (not a capped pilot). Expect roughly 10 % of raw segments to survive QC, similar in spirit to the ~5 % retention reported in method-spectrogram-cnn.md.                   |
+| Data flow                | `data/mimic3` (read-only) → cleaning/labeling pipeline → `data/dataset` (PyTorch-ready). All training/evaluation code reads only from `data/dataset`; nothing ever writes to `data/mimic3`.                                                    |
+| Repository shape         | Build the full script/CLI structure up front, at parity with the previous `bpe-vitaldb` project (see §3), rather than growing it incrementally.                                                                                                |
+| Calibration-window reuse | A patient's calibration window is also used as a normal training sample for the calibration-free model (no held-out anchor point).                                                                                                             |
+| Spectrogram sub-window   | Fixed at **1 s** (Hamming window, 95 % overlap) for the 8 s segment, not derived proportionally from the paper's 6 s/30 s ratio.                                                                                                               |
+| Multi-segment records    | Processed **segment-by-segment only** — windows never span a segment boundary, since segments can have different active signal sets and inter-segment gaps aren't guaranteed to be zero.                                                       |
 
 ## 2. Source Data Characteristics (verified locally)
 
@@ -42,11 +42,11 @@ constraints for the rest of this plan:
   under `p00` found PLETH present in ~30 % of records, but PLETH **and** ABP
   together in only ~7 %. The full-dataset equivalent is expected to yield on
   the order of several hundred to ~1,000 usable subjects before the
-  window-level QC in method.md is even applied — consistent with the
+  window-level QC in method-spectrogram-cnn.md is even applied — consistent with the
   question 3 answer that heavy attrition is expected and accepted.
 - No MIMIC-III **clinical** tables (admissions, demographics) are present
   under `data/mimic3` — only the waveform matched subset. This is actually
-  consistent with method.md, which never uses demographic features (that is
+  consistent with method-spectrogram-cnn.md, which never uses demographic features (that is
   the whole point of the Siamese calibration design).
 - `data/mimic3` must remain **read-only**: no script may write, rename, or
   delete anything under it.
@@ -82,7 +82,7 @@ bpe-mimic3/
 │   ├── trainer.py
 │   └── metrics.py                    # MAE/RMSE/ME/SD, BHS grade, AAMI pass/fail
 ├── docs/
-│   ├── method.md                     # source methodology (existing)
+│   ├── method-spectrogram-cnn.md                     # source methodology (existing)
 │   ├── development-plan.md           # this document
 │   ├── data-cleaning.md              # implementation-level QC pipeline detail
 │   └── evaluation-result*.md         # written once models are evaluated
@@ -96,7 +96,7 @@ bpe-mimic3/
 └── README.md
 ```
 
-## 4. Preprocessing Pipeline (method.md, adapted to 8 s @ native 125 Hz)
+## 4. Preprocessing Pipeline (method-spectrogram-cnn.md, adapted to 8 s @ native 125 Hz)
 
 Applied per candidate record, then aggregated per patient. See
 [docs/data-cleaning.md](data-cleaning.md) for the implementation-level
@@ -119,9 +119,9 @@ filter gap found by inspection).
    (4 s stride) but is a tunable CLI parameter.
 4. **Per-window SBP/DBP labeling**: from the ABP window, detect peaks/troughs
    and take the mean of the max/min peaks as SBP/DBP, exactly as in
-   method.md §1.
+   method-spectrogram-cnn.md §1.
 5. **Physiological range filter**: reject windows with SBP outside
-   `[75, 165]` mmHg or DBP outside `[40, 85]` mmHg (unchanged from method.md —
+   `[75, 165]` mmHg or DBP outside `[40, 85]` mmHg (unchanged from method-spectrogram-cnn.md —
    these bounds are about plausible BP values, not window length).
 6. **Autocorrelation-based quality filter**: reject windows where the
    (DC-removed, normalized) autocorrelation of PPG or ABP falls below a
@@ -145,7 +145,7 @@ filter gap found by inspection).
    yield, not a hard requirement.
 8. **Outlier removal**: for each patient, drop windows whose SBP/DBP
    deviates more than ±40 mmHg from their first valid window's BP (unchanged
-   from method.md — this is a physiological-plausibility bound, not
+   from method-spectrogram-cnn.md — this is a physiological-plausibility bound, not
    window-length-dependent).
 9. **Calibration reference**: each patient's chronologically-first surviving
    window is retained as the **calibration pair** (`calib_x` = PPG segment,
@@ -153,7 +153,7 @@ filter gap found by inspection).
    also kept in the regular `(x, y)` pool, so the calibration-free model
    trains on it like any other window.
 10. **Patient-level split**: 60/20/20 train/val/test, split by patient (not
-    by window) to prevent leakage, matching method.md and `bpe-vitaldb`.
+    by window) to prevent leakage, matching method-spectrogram-cnn.md and `bpe-vitaldb`.
     Construction is **resumable in two phases** rather than one big
     in-memory pass, so an interrupted run doesn't have to restart from
     scratch:
@@ -189,7 +189,7 @@ filter gap found by inspection).
 
 ## 5. Model Architectures
 
-### 5.1 Calibration-free CNN (method.md §2)
+### 5.1 Calibration-free CNN (method-spectrogram-cnn.md §2)
 
 - Input: spectrogram of an 8 s PPG window (STFT, **1 s** Hamming sub-window,
   95 % overlap).
@@ -198,7 +198,7 @@ filter gap found by inspection).
   layers, ReLU throughout, final FC → linear regression head (SBP, DBP).
 - Loss: L1 (MAE). Optimizer: Adam, batch size 32 (paper default, tunable).
 
-### 5.2 Siamese calibration-based network (method.md §3)
+### 5.2 Siamese calibration-based network (method-spectrogram-cnn.md §3)
 
 - Two weight-sharing copies of the CNN in §5.1, each ending in a feature
   vector instead of a direct BP regression.
