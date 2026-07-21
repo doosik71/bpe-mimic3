@@ -17,9 +17,9 @@ from typing import Optional
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 
-from bpe.dataset import CalibrationFreeDataset, CalibrationPairDataset, DEFAULT_DATASET_DIR, subject_balanced_weights
+from bpe.dataset import CalibrationFreeDataset, CalibrationPairDataset, DEFAULT_DATASET_DIR, SubjectBalancedSampler
 from bpe.models.registry import (
     build_calibration_based_model,
     build_calibration_free_model,
@@ -139,9 +139,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-subject-balanced-sampling",
         action="store_true",
-        help="Sample training windows uniformly instead of weighting each window by "
-        "1/(subject's window count) (default: balanced -- see bpe.dataset.subject_balanced_weights, "
-        "since windows per subject range from ~375 to over a million)",
+        help="Sample training windows uniformly instead of drawing each subject with equal "
+        "probability and then a window within it (default: balanced -- see "
+        "bpe.dataset.SubjectBalancedSampler, since windows per subject range from ~375 to over a million)",
     )
     parser.add_argument(
         "--resume", type=Path, default=None, help="Path to a checkpoint .pt to resume from (default: start a fresh run)"
@@ -196,9 +196,7 @@ def main() -> None:
 
     if subject_balanced_sampling:
         generator = torch.Generator().manual_seed(args.seed)
-        sampler = WeightedRandomSampler(
-            subject_balanced_weights(train_set), num_samples=len(train_set), replacement=True, generator=generator
-        )
+        sampler = SubjectBalancedSampler(train_set, num_samples=len(train_set), generator=generator)
         train_loader = DataLoader(
             train_set, batch_size=args.batch_size, sampler=sampler, num_workers=args.workers, drop_last=True
         )

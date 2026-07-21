@@ -448,9 +448,9 @@ rate already matches the target rate.
    top 10% of subjects holding ~46% of windows). If per-window random
    sampling is used during training as-is, a handful of subjects will
    dominate gradient updates. **Addressed**: `train-model` now defaults to a
-   subject-balanced `WeightedRandomSampler` (`bpe.dataset.subject_balanced_weights`,
-   weight `1/(subject's window count)`), overridable with
-   `--no-subject-balanced-sampling`.
+   subject-balanced sampler (`bpe.dataset.SubjectBalancedSampler`, drawing
+   each subject with equal probability then a window within it), overridable
+   with `--no-subject-balanced-sampling`.
 5. **The calibration reference window is not always representative.**
    Most subjects' calibration BP sits within ~15 mmHg of their own mean, but
    the tails reach ±35 mmHg. Combined with the drift-correlation finding

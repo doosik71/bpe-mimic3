@@ -16,7 +16,7 @@ from typing import NamedTuple
 import numpy as np
 from numpy.lib import format as _npy_format
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 
 DEFAULT_DATASET_DIR = Path("data/dataset")
 
@@ -244,18 +244,57 @@ class CalibrationPairDataset(_WindowDatasetBase):
         return x, y, calib_x, calib_y
 
 
-def subject_balanced_weights(dataset: _WindowDatasetBase) -> torch.Tensor:
-    """Per-window sampling weight, inversely proportional to how many
-    windows that window's subject contributes.
+class SubjectBalancedSampler(Sampler[int]):
+    """Draws window indices so every subject is equally likely on each draw,
+    then a window uniformly within the chosen subject.
 
     Windows per subject are highly skewed (dataset-statistic.md found counts
     ranging from the `min_valid_windows` floor of 375 up to over a million),
     so uniform per-window sampling lets a handful of long-stay subjects
-    dominate every training batch. Weighting each window by `1 / n_subject`
-    gives every subject the same expected total weight per epoch regardless
-    of how many windows they have -- pass the result to
-    `torch.utils.data.WeightedRandomSampler`.
+    dominate every training batch. Sampling a subject uniformly and then a
+    window within it gives every subject the same expected number of draws
+    per epoch regardless of how many windows they have.
+
+    This is exactly the distribution of
+    ``WeightedRandomSampler(weights, replacement=True)`` with per-window
+    weight ``1 / n_subject``: a single multinomial draw picks subject ``s``
+    with probability ``n_s * (1 / n_s) / S = 1 / S`` (uniform over the ``S``
+    subjects), then a window uniformly within ``s``. Reproducing that
+    two-level draw directly avoids building a length-``N`` weight tensor,
+    whose length ``torch.multinomial`` rejects once it exceeds ``2**24``
+    categories (full-scale train splits have more windows than that).
     """
-    subject_n_windows = {subject_id: arrays.x.shape[0] for subject_id, arrays in dataset.subjects.items()}
-    weights = [1.0 / subject_n_windows[subject_id] for subject_id, _ in dataset.index]
-    return torch.as_tensor(weights, dtype=torch.double)
+
+    def __init__(
+        self,
+        dataset: _WindowDatasetBase,
+        num_samples: int | None = None,
+        generator: torch.Generator | None = None,
+    ):
+        # Subject k's windows occupy the contiguous global range
+        # [offset_k, offset_k + counts_k) in dataset.index, because
+        # _build_window_index appends subjects in dataset.subjects' order and
+        # all of a subject's windows before moving to the next. Deriving
+        # offsets from that order lets a drawn (subject, local) pair map to a
+        # global index with plain arithmetic and O(subjects) memory.
+        counts = [arrays.x.shape[0] for arrays in dataset.subjects.values()]
+        self.counts = torch.tensor(counts, dtype=torch.long)
+        self.offsets = torch.cumsum(self.counts, dim=0) - self.counts
+        self.num_samples = num_samples if num_samples is not None else len(dataset)
+        self.generator = generator
+
+    def __len__(self) -> int:
+        return self.num_samples
+
+    def __iter__(self):
+        g = self.generator
+        n_subjects = self.counts.numel()
+        subject_idx = torch.randint(0, n_subjects, (self.num_samples,), generator=g)
+        n_windows = self.counts[subject_idx]
+        # Uniform window offset in [0, n) per drawn subject. float64 keeps the
+        # draw uniform even for the largest subjects (~1M windows); the min()
+        # guards the (measure-zero) case where rounding pushes rand*n to n.
+        local_idx = (torch.rand(self.num_samples, generator=g, dtype=torch.double) * n_windows).long()
+        local_idx = torch.minimum(local_idx, n_windows - 1)
+        global_idx = self.offsets[subject_idx] + local_idx
+        yield from global_idx.tolist()

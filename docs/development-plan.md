@@ -208,9 +208,10 @@ filter gap found by inspection).
   layers, ReLU throughout, final FC → linear regression head (SBP, DBP).
 - Loss: L1 (MAE). Optimizer: Adam, batch size 32 (paper default, tunable).
 - Training windows are drawn with a **subject-balanced sampler** by
-  default (`bpe.dataset.subject_balanced_weights` +
-  `torch.utils.data.WeightedRandomSampler`, weighting each window by
-  `1/(its subject's window count)`), not plain uniform per-window shuffling.
+  default (`bpe.dataset.SubjectBalancedSampler`, drawing each subject with
+  equal probability then a window uniformly within it -- equivalent to
+  weighting each window by `1/(its subject's window count)`), not plain
+  uniform per-window shuffling.
   `dataset-statistic` found windows-per-subject concentration up to 40x
   max/median (top 10% of subjects holding ~46% of all windows), which would
   otherwise let a handful of long-stay subjects dominate gradient updates.
