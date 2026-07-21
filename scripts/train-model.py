@@ -7,8 +7,13 @@ training step used -- see bpe/dataset.py and bpe/trainer.py.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import random
+import signal
+import sys
+import traceback
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import torch
@@ -33,6 +38,57 @@ from bpe.trainer import (
 )
 
 DEFAULT_MODELS_DIR = Path("data/models")
+
+
+def _peak_memory_mb() -> Optional[float]:
+    """Best-effort peak resident memory of this process, or None if it
+    can't be determined (e.g. on Windows, which has no `resource` module).
+    Reported on abnormal exit so an out-of-memory kill is easy to spot."""
+    try:
+        import resource
+    except ImportError:
+        return None
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # ru_maxrss is bytes on macOS, kibibytes on Linux.
+    return usage / (1024 * 1024) if sys.platform == "darwin" else usage / 1024
+
+
+def _print_peak_memory() -> None:
+    peak = _peak_memory_mb()
+    if peak is not None:
+        print(f"train-model: peak memory use was {peak:.0f} MiB.", file=sys.stderr, flush=True)
+
+
+def _install_fault_handlers() -> None:
+    """Make an abnormal termination say *something* instead of dying
+    silently mid-run (as happened during val loading with no message).
+
+    Covers the failures a process can actually observe:
+      - a native fatal error (segfault/abort in a C extension such as
+        torch or numpy) -- faulthandler dumps a Python traceback that the
+        interpreter would otherwise skip;
+      - a catchable termination signal (SIGTERM/SIGHUP from a scheduler or
+        a soft OOM kill) -- reported below before we exit.
+    A hard `kill -9` / OOM-killer SIGKILL cannot be caught by any program,
+    so it necessarily stays silent; the peak-memory line helps flag it."""
+    faulthandler.enable()
+
+    def _on_signal(signum, frame):
+        name = signal.Signals(signum).name
+        print(f"\ntrain-model: received {name}; terminating.", file=sys.stderr, flush=True)
+        traceback.print_stack(frame, file=sys.stderr)
+        _print_peak_memory()
+        sys.exit(128 + signum)
+
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, _on_signal)
+        except (ValueError, OSError):
+            # e.g. not on the main thread, or unsupported on this platform.
+            pass
 
 
 def _set_seed(seed: int) -> None:
@@ -151,4 +207,28 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _install_fault_handlers()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\ntrain-model: interrupted by user (Ctrl-C).", file=sys.stderr, flush=True)
+        sys.exit(130)
+    except MemoryError:
+        print(
+            "\ntrain-model: out of memory. Each split is loaded into RAM eagerly "
+            "(see bpe.dataset.load_split); use a machine with more memory or a "
+            "smaller dataset split.",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc()
+        _print_peak_memory()
+        sys.exit(1)
+    except Exception:
+        # Any other error would normally print a traceback, but the tqdm
+        # progress bar can bury it; re-print it explicitly with a clear
+        # header so the run never ends without a reason.
+        print("\ntrain-model: terminated by an unhandled error:", file=sys.stderr, flush=True)
+        traceback.print_exc()
+        _print_peak_memory()
+        sys.exit(1)

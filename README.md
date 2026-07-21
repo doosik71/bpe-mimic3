@@ -149,6 +149,8 @@ bpe-mimic3/
 │   ├── method-spectrogram-cnn.md                      # source methodology
 │   ├── development-plan.md            # implementation plan & status
 │   ├── data-cleaning.md               # implementation-level QC pipeline detail
+│   ├── construct-dataset.md           # construct-dataset design & usage
+│   ├── train-model.md                 # train-model design & usage (memory, crash reporting)
 │   └── evaluation-result*.md          # written once models are evaluated
 ├── data/                              # git-ignored, local only
 │   ├── mimic3/                        # read-only symlink — DO NOT MODIFY
@@ -198,9 +200,10 @@ uv run python scripts/build-mimic3-index.py
 
 Reads the index, then resamples/windows/labels/QC-filters every qualifying
 segment and writes `data/dataset/{train,val,test}/{subject_id}.npz` (see
-[docs/data-cleaning.md](docs/data-cleaning.md) for the QC rules). This is
-the slowest step and is **resumable** — progress is tracked in
-`data/dataset/_progress.csv`, so re-running the same command after an
+[docs/construct-dataset.md](docs/construct-dataset.md) for the module's design
+and full flag list, and [docs/data-cleaning.md](docs/data-cleaning.md) for the
+QC rules). This is the slowest step and is **resumable** — progress is tracked
+in `data/dataset/_progress.csv`, so re-running the same command after an
 interruption continues instead of restarting.
 
 ```bash
@@ -230,7 +233,10 @@ uv run python scripts/dataset-browser.py
 calibration-free model, `spectro_siamese` for the calibration-based model
 (both use spectrogram features -- see [docs/COMMANDS.md](docs/COMMANDS.md)
 for the full list of every registered architecture). Each run writes
-checkpoints and `metrics.csv` to `data/models/<model>/`.
+checkpoints and `metrics.csv` to `data/models/<model>/`. See
+[docs/train-model.md](docs/train-model.md) for the module's design, including
+its memory-mapped data loading (which keeps per-process memory low enough to
+run several trainings at once) and crash-reporting behavior.
 
 ```bash
 uv run python scripts/train-model.py --model spectro_cnn

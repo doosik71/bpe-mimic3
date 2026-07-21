@@ -286,6 +286,11 @@ def write_patient_npz(result: PatientResult, output_dir: Path, split_name: Optio
     target_dir = output_dir / split_name if split_name else output_dir
     target_dir.mkdir(parents=True, exist_ok=True)
     out_path = target_dir / f"{result.subject_id}.npz"
+    # Uncompressed np.savez (NOT savez_compressed) is required, not just
+    # preferred: the training loader memory-maps the large `x` array in place
+    # so a whole split needn't be read into RAM (see bpe/dataset.py and
+    # docs/construct-dataset.md), which only works when members are stored
+    # uncompressed. Compression would also cost decode time on every load.
     np.savez(
         out_path,
         x=result.x,
