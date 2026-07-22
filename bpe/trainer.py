@@ -26,7 +26,7 @@ StepFn = Callable[[nn.Module, tuple, torch.device],
 DEFAULT_EPOCHS = 100
 DEFAULT_LR = 1e-3
 DEFAULT_WEIGHT_DECAY = 1e-4
-DEFAULT_PATIENCE = 15
+DEFAULT_PATIENCE = 5
 
 _L1 = nn.L1Loss()
 
