@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# run -- dispatch to a project Python script under scripts/.
+#
+#   run <script-name> [args...]   =>  uv run python scripts/<script-name>.py [args...]
+#
+# The trailing ".py" is optional, so "run eval-model" and "run eval-model.py"
+# are equivalent. With no arguments, the available scripts are listed.
+#
+# Examples:
+#   run eval-calib-model --help
+#   run train-wcrc-model --dataset-dir data/dataset-v2 --models-dir data/models-v2
+#   run eval-continuous-model data/models/mtae_wcrc
+set -euo pipefail
+
+cd "$(dirname "$0")"
+scripts_dir="scripts"
+
+list_scripts() {
+    echo "Usage: run <script-name> [args...]"
+    echo "       run <script-name> --help"
+    echo
+    echo "Available scripts:"
+    for f in "$scripts_dir"/*.py; do
+        [ -e "$f" ] || continue
+        printf '  %s\n' "$(basename "$f" .py)"
+    done
+}
+
+if [ "$#" -eq 0 ]; then
+    list_scripts
+    exit 0
+fi
+
+name="${1%.py}"        # allow "run foo.py"
+shift
+
+target="$scripts_dir/$name.py"
+if [ ! -f "$target" ]; then
+    echo "run: unknown script '$name' (no $target)" >&2
+    echo >&2
+    list_scripts >&2
+    exit 1
+fi
+
+exec uv run python "$target" "$@"

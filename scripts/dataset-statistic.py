@@ -6,7 +6,7 @@ this was planned from (and the ones deferred to later, heavier tooling).
 Reads:
     data/mimic3_index.csv           pre-QC segment index (optional -- skipped
                                      if not found; build with
-                                     bin/build-mimic3-index)
+                                     `run build-mimic3-index`)
     data/dataset/_progress.csv      per-subject QC outcome ledger
     data/dataset/{train,val,test}/*.npz   final PyTorch-ready windows
 
@@ -32,7 +32,7 @@ Deferred (not implemented here -- see docs/dataset-analysis.md):
         per-window QC filters (bpe/preprocess/quality.py) against raw
         signals, not just reading stored outputs.
     #22 superimposed pulse-shape consistency -- a visual/qualitative check,
-        better suited to bin/dataset-browser.
+        better suited to `run dataset-browser`.
 
 Usage:
     uv run python scripts/dataset-statistic.py
@@ -663,7 +663,7 @@ def main() -> None:
 
     if not dataset_dir.exists():
         print(f"ERROR: dataset directory not found: {dataset_dir}")
-        print("Run bin/construct-dataset first to build the dataset.")
+        print("Run `run construct-dataset` first to build the dataset.")
         return
 
     report: dict = {}

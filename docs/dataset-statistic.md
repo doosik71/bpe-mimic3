@@ -1,6 +1,6 @@
 # Dataset Statistic Tool: Design, Usage, and Results
 
-`scripts/dataset-statistic.py` (`bin/dataset-statistic`) is the analysis tool
+`scripts/dataset-statistic.py` (`run dataset-statistic`) is the analysis tool
 planned in [dataset-analysis.md](dataset-analysis.md) and referenced (as a
 not-yet-built tool) throughout [README.md](../README.md),
 [development-plan.md](development-plan.md), and
@@ -121,7 +121,7 @@ Three items from [dataset-analysis.md](dataset-analysis.md) are deliberately
   under alternative threshold values, not just reading stored outputs. A
   meaningfully heavier tool than the rest of this script.
 - **#22, superimposed pulse-shape consistency** -- a visual/qualitative
-  check, better suited to `bin/dataset-browser`'s waveform view than a
+  check, better suited to `run dataset-browser`'s waveform view than a
   batch statistic.
 
 ### 2.6 Known Limitation Found During the Full Run (fixed)
@@ -168,14 +168,13 @@ for the fix under consideration.
 ### 3.1 Running the Tool
 
 ```bash
+run dataset-statistic
+# equivalently:
 uv run python scripts/dataset-statistic.py
-# or, equivalently:
-bin/dataset-statistic          # Linux/macOS
-bin\dataset-statistic.bat      # Windows
 ```
 
 Requires `data/dataset/_progress.csv` and/or `data/dataset/{train,val,test}`
-to exist already (run `bin/construct-dataset` first). `data/mimic3_index.csv`
+to exist already (run `run construct-dataset` first). `data/mimic3_index.csv`
 is read too if present, but its absence only skips §1 of the report.
 
 ### 3.2 CLI Options
@@ -250,7 +249,7 @@ Run on 2026-07-21 against the full dataset with default settings (no
 `data/dataset/` (`statistic.json` and the seven `*.png` files listed in
 §2.4); this section narrates what they show. `data/` is git-ignored, so
 these files exist only on the machine that ran the tool -- re-run
-`bin/dataset-statistic` to regenerate them elsewhere.
+`run dataset-statistic` to regenerate them elsewhere.
 
 ### 4.1 Run Configuration
 

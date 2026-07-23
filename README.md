@@ -131,7 +131,7 @@ build order); items are added as each phase is implemented.
 
 ```text
 bpe-mimic3/
-├── bin/                              # Windows .bat + POSIX sh launchers
+├── run / run.bat                     # launcher: `run <command> [args]` → uv run python scripts/<command>.py
 │   ├── build-mimic3-index[.bat]      # scan data/mimic3 → index CSV
 │   ├── construct-dataset[.bat]       # build data/dataset (125 Hz, 8 s, QC)
 │   ├── mimic3-browser[.bat]          # GUI raw WFDB waveform browser
@@ -145,7 +145,7 @@ bpe-mimic3/
 │   ├── generate-train-status[.bat] / generate-all-train-status[.bat]
 │   ├── collect-result[.bat] / summarize-result[.bat] / generate-overview[.bat]
 │   └── share-data[.bat] / download-shared-data[.bat] # share data/dataset
-├── scripts/                          # one .py per bin/ entry above
+├── scripts/                          # one .py per run command
 ├── bpe/                              # package
 │   ├── io/                           # WFDB record/segment reading helpers
 │   ├── preprocess/                   # resample, window, QC, peak-based labeling
@@ -189,11 +189,13 @@ uv sync
 
 ## Quick Start: End-to-End Pipeline
 
-Every step below has a matching launcher in [bin/](bin/) (`bin/<name>` on
-Linux/macOS, `bin\<name>.bat` on Windows) that just forwards to
-`uv run python scripts/<name>.py`; either form works, so the commands below
-use the `uv run` form directly. Pass `--help` to any script for the full
-flag list — only the flags relevant to a first run are shown here.
+Every step below is run through the project's `run` launcher at the
+repository root: `run <command> [options]` forwards to
+`uv run python scripts/<command>.py [options]` (the trailing `.py` is
+optional, and running `run` with no arguments lists every available
+command). The same `run <command>` works on Windows, where it resolves to
+`run.bat`. Pass `--help` to any command for the full flag list — only the
+flags relevant to a first run are shown here.
 
 ### 1. Build the MIMIC-III index
 
@@ -202,7 +204,7 @@ arterial BP channel, and writes `data/mimic3_index.csv`. Every later step
 reads this index instead of re-scanning the raw dataset.
 
 ```bash
-uv run python scripts/build-mimic3-index.py
+run build-mimic3-index
 ```
 
 ### 2. Construct the dataset
@@ -216,7 +218,7 @@ in `data/dataset/_progress.csv`, so re-running the same command after an
 interruption continues instead of restarting.
 
 ```bash
-uv run python scripts/construct-dataset.py
+run construct-dataset
 ```
 
 Useful flags while iterating:
@@ -232,7 +234,7 @@ and PSDs — useful for sanity-checking QC thresholds before committing to a
 full dataset build, and for browsing already-converted (even pre-split) data.
 
 ```bash
-uv run python scripts/dataset-browser.py
+run dataset-browser
 ```
 
 ### 4. Train a model
@@ -252,8 +254,8 @@ memory low enough to run several trainings at once) and crash-reporting
 behavior.
 
 ```bash
-uv run python scripts/train-model.py --model spectro_cnn
-uv run python scripts/train-model.py --model spectro_siamese
+run train-model --model spectro_cnn
+run train-model --model spectro_siamese
 ```
 
 Common flags: `--epochs`, `--batch-size`, `--lr`, `--patience` (early
@@ -265,8 +267,8 @@ Plots per-epoch loss/MAE curves from `metrics.csv` and prints a summary,
 either for one run or every run under `data/models/`:
 
 ```bash
-uv run python scripts/generate-train-status.py data/models/spectro_cnn
-uv run python scripts/generate-all-train-status.py
+run generate-train-status data/models/spectro_cnn
+run generate-all-train-status
 ```
 
 ### 6. Evaluate a trained model
@@ -279,8 +281,8 @@ calibration-based models (which evaluate using each patient's stored
 calibration pair):
 
 ```bash
-uv run python scripts/eval-model.py data/models/spectro_cnn
-uv run python scripts/eval-calib-model.py data/models/spectro_siamese
+run eval-model data/models/spectro_cnn
+run eval-calib-model data/models/spectro_siamese
 ```
 
 Add `--split val` to evaluate on validation instead of test, or
@@ -292,9 +294,9 @@ Once several models are trained and evaluated, gather their results into
 `data/results/` for easy comparison/sharing:
 
 ```bash
-uv run python scripts/collect-result.py       # copies eval_results.json + plots into data/results/<model>/
-uv run python scripts/summarize-result.py     # writes data/results/summary.csv, one row per model
-uv run python scripts/generate-overview.py    # writes overview_mae.png / overview_rmse.png (params vs. accuracy)
+run collect-result       # copies eval_results.json + plots into data/results/<model>/
+run summarize-result     # writes data/results/summary.csv, one row per model
+run generate-overview    # writes overview_mae.png / overview_rmse.png (params vs. accuracy)
 ```
 
 ## Experiment Results

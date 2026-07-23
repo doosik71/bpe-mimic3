@@ -7,11 +7,14 @@ the exact `--model` name for every architecture currently in the registry
 (`bpe/models/registry.py`) so each one can be trained and evaluated
 individually.
 
-Every script below has a matching launcher in [bin/](../bin/)
-(`bin/<name>` on Linux/macOS, `bin\<name>.bat` on Windows) that just
-forwards to `uv run python scripts/<name>.py`; the commands here use the
-`uv run` form directly since it works identically on every platform. Pass
-`--help` to any script for the full flag list and its defaults.
+Every command below is run through the project's `run` launcher at the
+repository root — `run <command> [options]` on Linux/macOS, the same
+`run <command> [options]` (resolving to `run.bat`) on Windows. It simply
+forwards to `uv run python scripts/<command>.py [options]`, so the two forms
+are equivalent and the trailing `.py` is optional (`run eval-model` and
+`run eval-model.py` are the same). Run `run` with no arguments to list every
+available command. Pass `--help` to any command for the full flag list and
+its defaults.
 
 See the [README](../README.md#quick-start-end-to-end-pipeline) for a
 narrative walkthrough of the same pipeline; this document is the
@@ -33,7 +36,7 @@ Scans `data/mimic3` once for segments carrying both PPG (`PLETH`) and an
 arterial BP channel, and writes `data/mimic3_index.csv`.
 
 ```bash
-uv run python scripts/build-mimic3-index.py
+run build-mimic3-index
 ```
 
 Useful flags: `--limit N` (scan only the first N records, for a quick
@@ -48,7 +51,7 @@ qualifying segment and writes
 restarting (progress tracked in `data/dataset/_progress.csv`).
 
 ```bash
-uv run python scripts/construct-dataset.py
+run construct-dataset
 ```
 
 Useful flags: `--limit-subjects N` (quick trial run), `--force`
@@ -61,15 +64,15 @@ GUI browser for PPG/ABP waveforms, spectrograms, and PSDs — useful for
 sanity-checking QC thresholds or browsing an in-progress (unsplit) build.
 
 ```bash
-uv run python scripts/dataset-browser.py
+run dataset-browser
 ```
 
 ## 4. Train Every Model
 
 `--model` selects the architecture from the registry
 (`bpe/models/registry.py`). Every calibration-free model shares the same
-CLI (`scripts/train-model.py`); the calibration-based (Siamese) model
-uses the exact same script with `--model spectro_siamese`. Common flags:
+CLI (`run train-model`); the calibration-based (Siamese) model
+uses the exact same command with `--model spectro_siamese`. Common flags:
 `--epochs`, `--batch-size`, `--lr`, `--patience`, `--device
 auto|cpu|cuda`, `--resume <checkpoint.pt>`.
 
@@ -99,20 +102,20 @@ SBP/DBP regression loss — no extra flags needed, it's on by default for
 those three.
 
 ```bash
-uv run python scripts/train-model.py --model spectro_cnn
-uv run python scripts/train-model.py --model acfa
-uv run python scripts/train-model.py --model ae_lstm
-uv run python scripts/train-model.py --model bpnet_cf
-uv run python scripts/train-model.py --model conv_reg
-uv run python scripts/train-model.py --model mtae
-uv run python scripts/train-model.py --model mtae_mlp
-uv run python scripts/train-model.py --model pctn
-uv run python scripts/train-model.py --model ppnet
-uv run python scripts/train-model.py --model resnet1d13
-uv run python scripts/train-model.py --model resnet1d21
-uv run python scripts/train-model.py --model resnet1d37
-uv run python scripts/train-model.py --model resnet1d61
-uv run python scripts/train-model.py --model st_resnet
+run train-model --model spectro_cnn
+run train-model --model acfa
+run train-model --model ae_lstm
+run train-model --model bpnet_cf
+run train-model --model conv_reg
+run train-model --model mtae
+run train-model --model mtae_mlp
+run train-model --model pctn
+run train-model --model ppnet
+run train-model --model resnet1d13
+run train-model --model resnet1d21
+run train-model --model resnet1d37
+run train-model --model resnet1d61
+run train-model --model st_resnet
 ```
 
 ### 4.2 Calibration-based model (Siamese)
@@ -122,12 +125,12 @@ uv run python scripts/train-model.py --model st_resnet
 | `spectro_siamese` | Weight-shared twin backbone, regresses `ΔBP` vs. a stored calibration window (docs/method-spectrogram-cnn.md §3) |
 
 ```bash
-uv run python scripts/train-model.py --model spectro_siamese
+run train-model --model spectro_siamese
 ```
 
 ## 5. Evaluate Every Model
 
-`eval-model.py` is for calibration-free models; `eval-calib-model.py` is
+`run eval-model` is for calibration-free models; `run eval-calib-model` is
 for calibration-based models (it evaluates using each patient's stored
 calibration pair). Both take the run directory as a positional argument
 and report MAE, RMSE, ME, SD, BHS grade, and AAMI pass/fail for SBP/DBP,
@@ -138,26 +141,26 @@ the checkpoint. Common flags: `--split val|test`, `--checkpoint
 ### 5.1 Calibration-free models
 
 ```bash
-uv run python scripts/eval-model.py data/models/spectro_cnn
-uv run python scripts/eval-model.py data/models/acfa
-uv run python scripts/eval-model.py data/models/ae_lstm
-uv run python scripts/eval-model.py data/models/bpnet_cf
-uv run python scripts/eval-model.py data/models/conv_reg
-uv run python scripts/eval-model.py data/models/mtae
-uv run python scripts/eval-model.py data/models/mtae_mlp
-uv run python scripts/eval-model.py data/models/pctn
-uv run python scripts/eval-model.py data/models/ppnet
-uv run python scripts/eval-model.py data/models/resnet1d13
-uv run python scripts/eval-model.py data/models/resnet1d21
-uv run python scripts/eval-model.py data/models/resnet1d37
-uv run python scripts/eval-model.py data/models/resnet1d61
-uv run python scripts/eval-model.py data/models/st_resnet
+run eval-model data/models/spectro_cnn
+run eval-model data/models/acfa
+run eval-model data/models/ae_lstm
+run eval-model data/models/bpnet_cf
+run eval-model data/models/conv_reg
+run eval-model data/models/mtae
+run eval-model data/models/mtae_mlp
+run eval-model data/models/pctn
+run eval-model data/models/ppnet
+run eval-model data/models/resnet1d13
+run eval-model data/models/resnet1d21
+run eval-model data/models/resnet1d37
+run eval-model data/models/resnet1d61
+run eval-model data/models/st_resnet
 ```
 
 ### 5.2 Calibration-based model (Siamese)
 
 ```bash
-uv run python scripts/eval-calib-model.py data/models/spectro_siamese
+run eval-calib-model data/models/spectro_siamese
 ```
 
 ## 6. Check Training Progress
@@ -166,8 +169,8 @@ Plots per-epoch loss/MAE curves from `metrics.csv` and prints a summary,
 either for one run or every run under `data/models/`:
 
 ```bash
-uv run python scripts/generate-train-status.py data/models/spectro_cnn
-uv run python scripts/generate-all-train-status.py
+run generate-train-status data/models/spectro_cnn
+run generate-all-train-status
 ```
 
 ## 7. Collect and Compare Results Across Models
@@ -176,7 +179,7 @@ Once several models are trained and evaluated, gather their results into
 `data/results/` for easy comparison/sharing:
 
 ```bash
-uv run python scripts/collect-result.py       # copies eval_results.json + plots into data/results/<model>/
-uv run python scripts/summarize-result.py     # writes data/results/summary.csv, one row per model
-uv run python scripts/generate-overview.py    # writes overview_mae.png / overview_rmse.png (params vs. accuracy)
+run collect-result       # copies eval_results.json + plots into data/results/<model>/
+run summarize-result     # writes data/results/summary.csv, one row per model
+run generate-overview    # writes overview_mae.png / overview_rmse.png (params vs. accuracy)
 ```

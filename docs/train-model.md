@@ -30,23 +30,23 @@ training step used:
 
 ### Key flags
 
-| Flag                            | Default        | Purpose                                                        |
-| ------------------------------- | -------------- | -------------------------------------------------------------- |
-| `--model`                       | (required)     | Architecture name from the registry.                           |
-| `--dataset-dir`                 | `data/dataset` | Directory holding `{train,val,test}/*.npz`.                    |
-| `--models-dir`                  | `data/models`  | Checkpoints/metrics are written under `<models-dir>/<model>/`. |
-| `--epochs`                      | 100            | Maximum training epochs.                                       |
-| `--batch-size`                  | 32             | Paper default.                                                 |
-| `--lr`                          | 1e-3           | Adam learning rate.                                            |
-| `--weight-decay`                | 1e-4           | Adam weight decay.                                             |
-| `--patience`                    | 15             | Early-stopping patience on validation loss.                    |
-| `--embedding-dim` / `--dropout` | model default  | Backbone overrides.                                            |
-| `--seed`                        | 42             | RNG seed (python/numpy/torch).                                 |
-| `--device`                      | auto           | `auto` \| `cpu` \| `cuda` \| `cuda:N`.                         |
-| `--workers`                     | 0              | DataLoader worker processes (see below).                       |
-| `--no-normalize`                | off            | Skip per-window z-score normalization.                         |
-| `--no-subject-balanced-sampling`| off            | Sample training windows uniformly instead of the default subject-balanced sampler (see below). |
-| `--resume`                      | (fresh)        | Path to a checkpoint `.pt` to resume from.                     |
+| Flag                             | Default        | Purpose                                                                                        |
+| -------------------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| `--model`                        | (required)     | Architecture name from the registry.                                                           |
+| `--dataset-dir`                  | `data/dataset` | Directory holding `{train,val,test}/*.npz`.                                                    |
+| `--models-dir`                   | `data/models`  | Checkpoints/metrics are written under `<models-dir>/<model>/`.                                 |
+| `--epochs`                       | 100            | Maximum training epochs.                                                                       |
+| `--batch-size`                   | 32             | Paper default.                                                                                 |
+| `--lr`                           | 1e-3           | Adam learning rate.                                                                            |
+| `--weight-decay`                 | 1e-4           | Adam weight decay.                                                                             |
+| `--patience`                     | 15             | Early-stopping patience on validation loss.                                                    |
+| `--embedding-dim` / `--dropout`  | model default  | Backbone overrides.                                                                            |
+| `--seed`                         | 42             | RNG seed (python/numpy/torch).                                                                 |
+| `--device`                       | auto           | `auto` \| `cpu` \| `cuda` \| `cuda:N`.                                                         |
+| `--workers`                      | 0              | DataLoader worker processes (see below).                                                       |
+| `--no-normalize`                 | off            | Skip per-window z-score normalization.                                                         |
+| `--no-subject-balanced-sampling` | off            | Sample training windows uniformly instead of the default subject-balanced sampler (see below). |
+| `--resume`                       | (fresh)        | Path to a checkpoint `.pt` to resume from.                                                     |
 
 ### Subject-balanced training sampler
 
