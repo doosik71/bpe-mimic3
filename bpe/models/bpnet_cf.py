@@ -22,7 +22,7 @@ Output shape: (batch, 2) = [SBP, DBP]
 import torch
 from torch import nn
 
-from bpe.models.blocks import ensure_3d
+from bpe.models._blocks import ensure_3d
 from bpe.models.registry import register_model
 
 

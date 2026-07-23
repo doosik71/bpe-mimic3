@@ -12,7 +12,7 @@ regressor then maps the 64-d feature vector to [SBP, DBP].
 
 import torch.nn as nn
 
-from bpe.models.blocks import ensure_3d
+from bpe.models._blocks import ensure_3d
 from bpe.models.registry import register_model
 
 

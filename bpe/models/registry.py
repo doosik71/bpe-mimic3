@@ -1,7 +1,8 @@
 """Name -> constructor registry so `train-model.py --model <name>` can
 select an architecture without the training/eval code depending on any
-specific model class. Adding a new calibration-free architecture later is a
-pure addition to `_CALIBRATION_FREE_MODELS`.
+specific model class. Adding a new architecture later is a pure addition:
+decorate its constructor with `@register_model(...)` and make sure the
+module is imported below so the decorator runs.
 """
 
 from __future__ import annotations
@@ -10,44 +11,41 @@ from typing import Callable
 
 import torch.nn as nn
 
-from bpe.models.calibration_free import SpectroCNN
-from bpe.models.siamese import SpectroSiamese
+_CALIBRATION_FREE_MODELS: dict[str, Callable[..., nn.Module]] = {}
 
-_CALIBRATION_FREE_MODELS: dict[str, Callable[..., nn.Module]] = {
-    "spectro_cnn": SpectroCNN,
-}
-
-_CALIBRATION_BASED_MODELS: dict[str, Callable[..., nn.Module]] = {
-    "spectro_siamese": SpectroSiamese,
-}
+_CALIBRATION_BASED_MODELS: dict[str, Callable[..., nn.Module]] = {}
 
 
-def register_model(name: str):
-    """Decorator: register a calibration-free model constructor by name.
+def register_model(name: str, *, calibration_based: bool = False):
+    """Decorator: register a model constructor by name.
 
-    Lets a model module self-register on import instead of needing a
-    manual `_CALIBRATION_FREE_MODELS` entry here -- used by the
-    architectures ported from the VitalDB experiments in
-    temp/__legacy_vitaldb_models (see bpe/models/mtae.py, acfa.py, etc.),
-    which already expect this exact decorator name/import path.
+    Lets a model module self-register on import instead of needing a manual
+    registry entry here. `calibration_based=False` (the default) registers a
+    calibration-free architecture (predicts BP from a single window);
+    `calibration_based=True` registers a model that needs a patient-specific
+    reference reading (e.g. SpectroSiamese). The two kinds live in separate
+    dicts so `train-model.py` can pick the right build path.
     """
 
     def decorator(constructor: Callable[..., nn.Module]) -> Callable[..., nn.Module]:
         key = name.strip().lower().replace("-", "_")
         if not key:
             raise ValueError("model name must not be empty")
-        if key in _CALIBRATION_FREE_MODELS:
+        registry = _CALIBRATION_BASED_MODELS if calibration_based else _CALIBRATION_FREE_MODELS
+        if key in registry:
             raise ValueError(f"model already registered: {key}")
-        _CALIBRATION_FREE_MODELS[key] = constructor
+        registry[key] = constructor
         return constructor
 
     return decorator
 
 
 # Importing these triggers their @register_model(...) decorators above, so
-# they must come after `register_model` is defined. Each is a calibration-free
-# architecture ported from temp/__legacy_vitaldb_models. resnet1d61 comes
-# first since resnet1d13/21/37 and st_resnet import BasicBlock1D from it.
+# they must come after `register_model` is defined. resnet1d61 comes first
+# since resnet1d13/21/37 and st_resnet import BasicBlock1D from it. The
+# resnet/mtae/etc. architectures are ported from temp/__legacy_vitaldb_models.
+from bpe.models import spectro_cnn as _spectro_cnn  # noqa: E402,F401
+from bpe.models import spectro_siamese as _spectro_siamese  # noqa: E402,F401
 from bpe.models import resnet1d61 as _resnet1d61  # noqa: E402,F401
 from bpe.models import acfa as _acfa  # noqa: E402,F401
 from bpe.models import ae_lstm as _ae_lstm  # noqa: E402,F401

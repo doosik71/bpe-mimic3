@@ -12,7 +12,7 @@ Channel progression is truncated at stage 2 (32 -> 64).
 import torch
 from torch import nn
 
-from bpe.models.blocks import ConvBnAct1d, RegressionHead, ensure_3d
+from bpe.models._blocks import ConvBnAct1d, RegressionHead, ensure_3d
 from bpe.models.registry import register_model
 from bpe.models.resnet1d61 import BasicBlock1D
 

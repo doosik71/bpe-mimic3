@@ -4,8 +4,8 @@ producing an embedding vector. Both the calibration-free CNN and the
 Siamese calibration-based model build on this same backbone -- the
 calibration-free model adds a direct regression head, the Siamese model
 runs two copies (weight-shared, since it's a single instance) and regresses
-on their difference. See bpe/models/calibration_free.py and
-bpe/models/siamese.py.
+on their difference. See bpe/models/spectro_cnn.py and
+bpe/models/spectro_siamese.py.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from bpe.models.frontend import LogSpectrogram
+from bpe.models._frontend import LogSpectrogram
 from bpe.preprocess.pipeline import DEFAULT_TARGET_FS, DEFAULT_WINDOW_SEC
 
 DEFAULT_INPUT_SAMPLES = int(round(DEFAULT_WINDOW_SEC * DEFAULT_TARGET_FS))

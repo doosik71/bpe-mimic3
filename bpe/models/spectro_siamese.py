@@ -11,15 +11,17 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from bpe.models.backbone import (
+from bpe.models._backbone import (
     DEFAULT_DROPOUT,
     DEFAULT_EMBEDDING_DIM,
     DEFAULT_INPUT_SAMPLES,
     PPGFeatureBackbone,
 )
+from bpe.models.registry import register_model
 from bpe.preprocess.pipeline import DEFAULT_TARGET_FS
 
 
+@register_model("spectro_siamese", calibration_based=True)
 class SpectroSiamese(nn.Module):
     def __init__(
         self,

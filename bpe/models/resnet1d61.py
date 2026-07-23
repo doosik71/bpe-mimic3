@@ -8,7 +8,7 @@ changes were needed for this project's 1,000-sample MIMIC-III input.
 import torch
 from torch import nn
 
-from bpe.models.blocks import ConvBnAct1d, RegressionHead, ensure_3d
+from bpe.models._blocks import ConvBnAct1d, RegressionHead, ensure_3d
 from bpe.models.registry import register_model
 
 

@@ -8,7 +8,7 @@ were needed for this project's MIMIC-III dataset.
 import torch
 from torch import nn
 
-from bpe.models.blocks import ConvBnAct1d, ensure_3d
+from bpe.models._blocks import ConvBnAct1d, ensure_3d
 from bpe.models.registry import register_model
 
 
