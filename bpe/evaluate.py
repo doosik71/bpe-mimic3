@@ -51,7 +51,7 @@ def collect_predictions(
     model.eval()
     preds, trues = [], []
     print(f"running inference over {len(loader)} batch(es)...")
-    for batch in tqdm(loader, desc="evaluating", unit="batch", ncols=100, ascii=True):
+    for batch in tqdm(loader, desc="evaluating", unit="batch", ncols=90, ascii=True):
         pred, true = predict_fn(model, batch, device)
         preds.append(pred.numpy())
         trues.append(true.numpy())

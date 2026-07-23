@@ -407,7 +407,7 @@ def convert_dataset(
     if show_progress:
         from tqdm import tqdm
 
-        progress_bar = tqdm(total=len(pending_ids), desc="converting patients", unit="pt", ncols=100, ascii=True)
+        progress_bar = tqdm(total=len(pending_ids), desc="converting patients", unit="pt", ncols=90, ascii=True)
 
     def _process(subject_id: str) -> tuple[Optional[PatientResult], int]:
         return process_patient(

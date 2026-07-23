@@ -131,7 +131,7 @@ def load_split(dataset_dir: Path, split: str) -> dict[str, SubjectArrays]:
     _raise_open_file_limit(len(paths))
     print(f"loading {len(paths)} subject(s) from {split_dir}...")
     subjects: dict[str, SubjectArrays] = {}
-    for path in tqdm(paths, desc=f"loading {split}", unit="subj", ncols=100, ascii=True):
+    for path in tqdm(paths, desc=f"loading {split}", unit="subj", ncols=90, ascii=True):
         try:
             x = _memmap_npz_array(path, "x")
             with np.load(path) as data:

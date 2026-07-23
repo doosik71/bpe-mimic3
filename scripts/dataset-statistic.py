@@ -342,7 +342,7 @@ def load_split(
     if show_progress:
         from tqdm import tqdm
 
-        progress = tqdm(total=len(npz_files), desc=f"loading {split_dir.name}", unit="subj", ncols=100, ascii=True)
+        progress = tqdm(total=len(npz_files), desc=f"loading {split_dir.name}", unit="subj", ncols=90, ascii=True)
 
     results: list[dict] = []
     if workers <= 1:

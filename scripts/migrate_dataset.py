@@ -240,7 +240,7 @@ def main() -> None:
     if not args.no_progress:
         from tqdm import tqdm
 
-        progress_bar = tqdm(total=len(jobs), desc="migrating subjects", unit="subj", ncols=100, ascii=True)
+        progress_bar = tqdm(total=len(jobs), desc="migrating subjects", unit="subj", ncols=90, ascii=True)
 
     progress_lock = threading.Lock()
     results: list[dict] = []

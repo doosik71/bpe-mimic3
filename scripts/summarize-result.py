@@ -40,7 +40,7 @@ def main() -> None:
 
     rows = []
     skipped = []
-    for model_dir in tqdm(model_dirs, desc="summarizing", unit="model", ncols=100, ascii=True):
+    for model_dir in tqdm(model_dirs, desc="summarizing", unit="model", ncols=90, ascii=True):
         results = read_eval_results(model_dir)
         if results is None:
             skipped.append(model_dir.name)

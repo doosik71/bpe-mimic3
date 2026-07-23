@@ -32,7 +32,7 @@ def main() -> None:
 
     collected = 0
     skipped = []
-    for model_dir in tqdm(model_dirs, desc="collecting", unit="model", ncols=100, ascii=True):
+    for model_dir in tqdm(model_dirs, desc="collecting", unit="model", ncols=90, ascii=True):
         if not (model_dir / "eval_results.json").is_file():
             skipped.append(model_dir.name)
             continue

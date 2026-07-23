@@ -191,7 +191,7 @@ def build_index(
     if show_progress:
         from tqdm import tqdm
 
-        progress = tqdm(total=len(record_list), desc="scanning records", unit="rec", ncols=100, ascii=True)
+        progress = tqdm(total=len(record_list), desc="scanning records", unit="rec", ncols=90, ascii=True)
 
     all_segments: list[SegmentInfo] = []
     errors: list[tuple[str, str]] = []

@@ -32,7 +32,7 @@ def _collect(models_dir: Path) -> list[dict]:
     model_dirs = list_model_dirs(models_dir)
     print(f"found {len(model_dirs)} model run(s) under {models_dir}")
     rows = []
-    for model_dir in tqdm(model_dirs, desc="collecting", unit="model", ncols=100, ascii=True):
+    for model_dir in tqdm(model_dirs, desc="collecting", unit="model", ncols=90, ascii=True):
         results = read_eval_results(model_dir)
         if results is None:
             continue

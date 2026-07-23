@@ -82,7 +82,7 @@ def _run_epoch(
     total_loss = 0.0
     total_abs_err = torch.zeros(2)
     n_samples = 0
-    for batch in tqdm(loader, desc=desc, unit="batch", ncols=100, ascii=True, leave=False):
+    for batch in tqdm(loader, desc=desc, unit="batch", ncols=90, ascii=True, leave=False):
         if training:
             optimizer.zero_grad()
         with torch.set_grad_enabled(training):
